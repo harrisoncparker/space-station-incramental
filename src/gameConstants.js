@@ -8,7 +8,7 @@ export const CREW_NAME_POOL = [
   'Osei','Chen','Vasquez','Nakamura','Petrov','Abubakar','Kowalski',
   'Singh','Reyes','Müller','Tanaka','Kim','Williams','Al-Rashid',
   'Dubois','Ferreira','Johansson','Nguyen','Bakker','Özdemir','Park',
-  'Ivanova','Santos','Fischer','Larsson',
+  'Ivanova','Santos','Fischer','Larsson','Lubo',
 ];
 
 export const ROLES = [

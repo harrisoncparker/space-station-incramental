@@ -14,10 +14,10 @@ permissions:
   pages: write
   id-token: write
 
-# Only one deployment runs at a time; cancel any in-progress run
+# Only one deployment runs at a time; do not cancel in-progress runs
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -25,6 +25,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
 
       - name: Set up Node
         uses: actions/setup-node@v4

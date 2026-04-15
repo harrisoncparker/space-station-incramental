@@ -19,7 +19,8 @@ export const INITIAL_STATE = {
     { id: 2, name: 'Vasquez', status: 'available', injuredTimer: 0 },
     { id: 3, name: 'Osei',    status: 'available', injuredTimer: 0 },
   ],
-  maxCrew: 6,
+  maxCrew: 3,      // tight from the start — build quarters to expand
+  quartersBuilt: 0,
   roles: { engineer: 0, lifeSupport: 1, hydroponics: 1, technician: 0, comms: 0 },
   crewIdCounter: 4,
 

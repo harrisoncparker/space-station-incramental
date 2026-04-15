@@ -107,5 +107,5 @@ export const RESOURCE_LABELS = {
   parts: 'Parts', credits: 'Credits', artifacts: 'Artifacts',
 };
 
-export const RECRUIT_BASE_COST = { food: 10, credits: 5 };
-export const RECRUIT_SCALE = 1.15;
+export const QUARTERS_BASE_COST = { parts: 20, credits: 15 };
+export const QUARTERS_SCALE = 1.15;

@@ -6,7 +6,7 @@ import { gameReducer, computeRates } from './gameReducer';
 import { INITIAL_STATE } from './gameState';
 import {
   ROLES, MISSIONS, ANOMALY_MISSION, RESEARCH_TREE,
-  RECRUIT_BASE_COST, RECRUIT_SCALE,
+  QUARTERS_BASE_COST, QUARTERS_SCALE,
 } from './gameConstants';
 
 // ── Palette ────────────────────────────────────────────────────
@@ -169,11 +169,10 @@ function CrewSection({ state, dispatch }) {
   const avail  = availCrew(state);
   const total  = state.crew.length;
 
-  const n = total;
-  const foodCost   = Math.ceil(RECRUIT_BASE_COST.food    * Math.pow(RECRUIT_SCALE, n));
-  const creditCost = Math.ceil(RECRUIT_BASE_COST.credits * Math.pow(RECRUIT_SCALE, n));
-  const atCap      = total >= state.maxCrew;
-  const canRecruit = !atCap && state.food >= foodCost && state.credits >= creditCost;
+  const q          = state.quartersBuilt;
+  const partsCost  = Math.ceil(QUARTERS_BASE_COST.parts   * Math.pow(QUARTERS_SCALE, q));
+  const creditCost = Math.ceil(QUARTERS_BASE_COST.credits * Math.pow(QUARTERS_SCALE, q));
+  const canBuild   = state.parts >= partsCost && state.credits >= creditCost;
 
   return (
     <div>
@@ -207,18 +206,28 @@ function CrewSection({ state, dispatch }) {
         );
       })}
 
-      {/* Recruit */}
+      {/* Crew Quarters */}
       <div style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 10, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>
+          Crew Quarters
+        </div>
+        <div style={{ fontSize: 11, color: DIM, marginBottom: 7 }}>
+          {q} built · capacity {state.maxCrew}
+          {total < state.maxCrew
+            ? <span style={{ color: G }}> · {state.maxCrew - total} berth{state.maxCrew - total !== 1 ? 's' : ''} available</span>
+            : <span style={{ color: A }}> · full</span>}
+        </div>
         <Btn
-          variant={canRecruit ? 'primary' : 'default'}
-          onClick={() => dispatch({ type: 'RECRUIT_CREW' })}
-          disabled={!canRecruit}
+          variant={canBuild ? 'primary' : 'default'}
+          onClick={() => dispatch({ type: 'BUILD_QUARTERS' })}
+          disabled={!canBuild}
           style={{ width: '100%', textAlign: 'center', fontSize: 12 }}
         >
-          {atCap
-            ? 'crew capacity full'
-            : `Recruit — ${foodCost} food · ${creditCost} credits`}
+          Build Quarters — {partsCost} parts · {creditCost} credits
         </Btn>
+        <div style={{ fontSize: 10, color: DIM, marginTop: 6 }}>
+          crew migrate via the dock when berths are available.
+        </div>
       </div>
 
       {/* Roster */}

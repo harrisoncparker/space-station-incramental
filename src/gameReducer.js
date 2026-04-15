@@ -3,7 +3,7 @@
 // ============================================================
 import {
   CREW_NAME_POOL, MISSIONS, ANOMALY_MISSION, RESEARCH_TREE,
-  RECRUIT_BASE_COST, RECRUIT_SCALE,
+  QUARTERS_BASE_COST, QUARTERS_SCALE,
 } from './gameConstants';
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -67,8 +67,10 @@ export function computeRates(s) {
 // Generate a dock event
 function genDockEvent(s) {
   const id = s.eventIdCounter;
-  // Weight events — distress/inspector less common early
-  const pool = ['freighter','freighter','refugee','drone','drone','inspector','distress'];
+  const hasRoom = s.crew.length < s.maxCrew;
+  // Migrants only appear when quarters are available; weight toward them when there's room
+  const pool = ['freighter','freighter','drone','drone','inspector','distress'];
+  if (hasRoom) { pool.push('migrant','migrant','migrant','refugee'); }
   const type = pool[Math.floor(Math.random() * pool.length)];
   const base = { id, type, timer: 20, eventIdCounter: s.eventIdCounter + 1 };
 
@@ -102,6 +104,18 @@ function genDockEvent(s) {
     return { ...base, section, lockDuration: 30,
       title: 'corporate inspector inbound.',
       desc: `audit in progress. ${section} locked for 30s.` };
+  }
+  if (type === 'migrant') {
+    const name = pickName(s.crew.map(c => c.name));
+    const flavors = [
+      `${name} is drifting in on a salvage vessel. seeking work.`,
+      `${name} hailing from the outer belt. requests permission to board.`,
+      `${name} arrived via transit shuttle. looking for a berth.`,
+      `${name} was crew on a decommissioned freighter. wants aboard.`,
+    ];
+    return { ...base, crewName: name,
+      title: `${name} requests permission to board.`,
+      desc: flavors[Math.floor(Math.random() * flavors.length)] };
   }
   // distress
   return { ...base,
@@ -305,22 +319,20 @@ export function gameReducer(state, action) {
       return { ...state, roles: { ...state.roles, [role]: newCount } };
     }
 
-    // ── RECRUIT CREW ────────────────────────────────────────
-    case 'RECRUIT_CREW': {
-      if (state.crew.length >= state.maxCrew) return state;
-      const n = state.crew.length;
-      const foodCost  = Math.ceil(RECRUIT_BASE_COST.food    * Math.pow(RECRUIT_SCALE, n));
-      const creditCost = Math.ceil(RECRUIT_BASE_COST.credits * Math.pow(RECRUIT_SCALE, n));
-      if (state.food < foodCost || state.credits < creditCost) return state;
-      const name = pickName(state.crew.map(c => c.name));
+    // ── BUILD QUARTERS ───────────────────────────────────────
+    case 'BUILD_QUARTERS': {
+      const q = state.quartersBuilt;
+      const partsCost  = Math.ceil(QUARTERS_BASE_COST.parts   * Math.pow(QUARTERS_SCALE, q));
+      const creditCost = Math.ceil(QUARTERS_BASE_COST.credits * Math.pow(QUARTERS_SCALE, q));
+      if (state.parts < partsCost || state.credits < creditCost) return state;
       let s = {
         ...state,
-        food:    state.food    - foodCost,
-        credits: state.credits - creditCost,
-        crew: [...state.crew, { id: state.crewIdCounter, name, status: 'available', injuredTimer: 0 }],
-        crewIdCounter: state.crewIdCounter + 1,
+        parts:         state.parts   - partsCost,
+        credits:       state.credits - creditCost,
+        quartersBuilt: q + 1,
+        maxCrew:       state.maxCrew + 1,
       };
-      return addLog(s, `${name} recruited. welcome aboard.`);
+      return addLog(s, `crew quarters constructed. capacity now ${s.maxCrew}.`);
     }
 
     // ── SET MISSION TYPE ────────────────────────────────────
@@ -382,6 +394,14 @@ export function gameReducer(state, action) {
       } else if (evt.type === 'inspector') {
         s = { ...s, lockedSections: { ...s.lockedSections, [evt.section]: evt.lockDuration } };
         s = addLog(s, `inspector boards. ${evt.section} locked for ${evt.lockDuration}s.`);
+      } else if (evt.type === 'migrant') {
+        if (s.crew.length >= s.maxCrew) return addLog(s, 'no quarters available. traveller turned away.');
+        s = {
+          ...s,
+          crew: [...s.crew, { id: s.crewIdCounter, name: evt.crewName, status: 'available', injuredTimer: 0 }],
+          crewIdCounter: s.crewIdCounter + 1,
+        };
+        s = addLog(s, `${evt.crewName} joins the crew.`);
       } else if (evt.type === 'distress') {
         if (s.food < evt.foodCost || s.o2 < evt.o2Cost) return addLog(s, 'insufficient resources. distress signal unanswered.');
         s = { ...s, food: s.food - evt.foodCost, o2: s.o2 - evt.o2Cost };

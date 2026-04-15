@@ -1,0 +1,111 @@
+// ============================================================
+// OUTPOST ZERO — Game Constants
+// ============================================================
+
+export const TICK_MS = 1000;
+
+export const CREW_NAME_POOL = [
+  'Osei','Chen','Vasquez','Nakamura','Petrov','Abubakar','Kowalski',
+  'Singh','Reyes','Müller','Tanaka','Kim','Williams','Al-Rashid',
+  'Dubois','Ferreira','Johansson','Nguyen','Bakker','Özdemir','Park',
+  'Ivanova','Santos','Fischer','Larsson',
+];
+
+export const ROLES = [
+  { id: 'engineer',    name: 'Engineer',     prodDesc: '+1.0 Power/s',  res: 'power' },
+  { id: 'lifeSupport', name: 'Life Support', prodDesc: '+0.5 O₂/s',     res: 'o2'    },
+  { id: 'hydroponics', name: 'Hydroponics',  prodDesc: '+0.3 Food/s',   res: 'food'  },
+  { id: 'technician',  name: 'Technician',   prodDesc: '+0.2 Parts/s',  res: 'parts' },
+  { id: 'comms',       name: 'Comms',        prodDesc: 'Dock frequency',res: null    },
+];
+
+export const MISSIONS = {
+  mining: {
+    id: 'mining', name: 'Mining Run',
+    desc: 'Ore/Parts from the surface',
+    duration: 45, baseSuccess: 0.90, risk: 'LOW',
+    getRewards: (n) => ({ parts: 15 + n * 5 }),
+  },
+  botanical: {
+    id: 'botanical', name: 'Botanical Survey',
+    desc: 'Food from surface flora',
+    duration: 60, baseSuccess: 0.85, risk: 'LOW',
+    getRewards: (n) => ({ food: 20 + n * 5 }),
+  },
+  archaeological: {
+    id: 'archaeological', name: 'Archaeological Dig',
+    desc: 'Credits + Artifacts from ruins',
+    duration: 90, baseSuccess: 0.75, risk: 'MED',
+    getRewards: (n) => ({ credits: 15 + n * 5, artifacts: 3 + n }),
+  },
+  rescue: {
+    id: 'rescue', name: 'Rescue Op',
+    desc: 'Recover crew from distress beacon',
+    duration: 75, baseSuccess: 0.70, risk: 'HIGH',
+    getRewards: () => ({ newCrew: 1 }),
+  },
+};
+
+export const ANOMALY_MISSION = {
+  id: 'anomaly', name: 'Anomaly Scan',
+  desc: 'Probe deep orbit anomalies — high risk, high reward',
+  duration: 120, baseSuccess: 0.60, risk: 'HIGH',
+  getRewards: (n) => ({ artifacts: 8 + n * 2, credits: 30 + n * 10 }),
+};
+
+export const RESEARCH_TREE = {
+  efficientRecycling: {
+    id: 'efficientRecycling', name: 'Efficient Recycling',
+    desc: 'O₂ consumption -20%',
+    tier: 1, artifactCost: 10, creditCost: 10, requires: [],
+  },
+  drillUpgrades: {
+    id: 'drillUpgrades', name: 'Drill Upgrades',
+    desc: 'Parts/s +50%',
+    tier: 1, artifactCost: 10, creditCost: 10, requires: [],
+  },
+  advancedHydroponics: {
+    id: 'advancedHydroponics', name: 'Advanced Hydroponics',
+    desc: 'Food production +50%',
+    tier: 2, artifactCost: 35, creditCost: 35,
+    requires: ['efficientRecycling'],
+  },
+  secondShuttle: {
+    id: 'secondShuttle', name: 'Second Shuttle',
+    desc: 'Run 2 missions simultaneously',
+    tier: 2, artifactCost: 35, creditCost: 35,
+    requires: ['drillUpgrades'],
+  },
+  fusionCore: {
+    id: 'fusionCore', name: 'Fusion Core',
+    desc: 'Power generation +80%',
+    tier: 3, artifactCost: 90, creditCost: 90,
+    requires: ['advancedHydroponics'],
+  },
+  crewExpansion: {
+    id: 'crewExpansion', name: 'Crew Expansion',
+    desc: 'Max crew +4',
+    tier: 3, artifactCost: 90, creditCost: 90,
+    requires: ['secondShuttle'],
+  },
+  deepOrbitScanner: {
+    id: 'deepOrbitScanner', name: 'Deep Orbit Scanner',
+    desc: 'Unlocks anomaly missions',
+    tier: 4, artifactCost: 200, creditCost: 200,
+    requires: ['fusionCore'],
+  },
+  warpBeacon: {
+    id: 'warpBeacon', name: 'Warp Beacon',
+    desc: 'Broadcast location — triggers finale',
+    tier: 4, artifactCost: 200, creditCost: 200,
+    requires: ['crewExpansion', 'deepOrbitScanner'],
+  },
+};
+
+export const RESOURCE_LABELS = {
+  power: 'Power', o2: 'O₂', food: 'Food',
+  parts: 'Parts', credits: 'Credits', artifacts: 'Artifacts',
+};
+
+export const RECRUIT_BASE_COST = { food: 10, credits: 5 };
+export const RECRUIT_SCALE = 1.15;

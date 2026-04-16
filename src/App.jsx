@@ -20,6 +20,7 @@ const BG  = '#0a0a0a';
 const BG2 = '#0e0e0e';
 const BD  = '#1e1e1e';
 const MN  = "'Courier New', Courier, monospace";
+const INV = '#4499cc';   // blue   — inventory resource (no danger)
 
 // ── Tiny helpers ───────────────────────────────────────────────
 
@@ -73,11 +74,13 @@ function Btn({ children, onClick, variant = 'default', disabled, style = {} }) {
   );
 }
 
-function ResourceBar({ label, value, cap, rate }) {
+// isSurvival=true → warning colours + pulse when critical (Power/O₂/Food)
+// isSurvival=false → neutral inventory colour, no panic (Parts/Credits/Artifacts)
+function ResourceBar({ label, value, cap, rate, isSurvival = true }) {
   const pct  = cap > 0 ? Math.min(1, value / cap) : 0;
-  const col  = resColor(pct);
-  const crit = pct < 0.05;
-  const rc   = rate > 0.005 ? G : rate < -0.005 ? R : DIM;
+  const col  = isSurvival ? resColor(pct) : INV;
+  const crit = isSurvival && pct < 0.05;
+  const rc   = rate > 0.005 ? G : rate < -0.005 ? (isSurvival ? R : DIM) : DIM;
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8,
@@ -100,7 +103,7 @@ function ResourceBar({ label, value, cap, rate }) {
   );
 }
 
-function Panel({ title, badge, open, onToggle, locked, children }) {
+function Panel({ title, badge, open, onToggle, locked, summary, children }) {
   return (
     <div style={{ marginBottom: 2, border: `1px solid ${BD}` }}>
       <div
@@ -112,14 +115,21 @@ function Panel({ title, badge, open, onToggle, locked, children }) {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           padding: '0 12px', minHeight: 46, background: BG2,
           cursor: locked ? 'default' : 'pointer', userSelect: 'none',
+          gap: 8,
         }}
       >
-        <span style={{ fontSize: 11, letterSpacing: 2.5, textTransform: 'uppercase', color: locked ? DIM : TX }}>
+        <span style={{ fontSize: 11, letterSpacing: 2.5, textTransform: 'uppercase', color: locked ? DIM : TX, flexShrink: 0 }}>
           {title}
           {badge ? <span style={{ color: A, marginLeft: 10, fontSize: 12 }}>{badge}</span> : null}
           {locked ? <span style={{ color: R, marginLeft: 10, fontSize: 10 }}>[LOCKED {locked}s]</span> : null}
         </span>
-        <span style={{ color: DIM, fontSize: 18, lineHeight: 1, paddingBottom: 1 }}>
+        {/* Summary line shown when panel is collapsed */}
+        {!open && !locked && summary && (
+          <span style={{ fontSize: 10, color: DIM, flex: 1, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+            {summary}
+          </span>
+        )}
+        <span style={{ color: DIM, fontSize: 18, lineHeight: 1, paddingBottom: 1, flexShrink: 0 }}>
           {locked ? '×' : open ? '−' : '+'}
         </span>
       </div>
@@ -132,19 +142,152 @@ function Panel({ title, badge, open, onToggle, locked, children }) {
   );
 }
 
+// ── ACTIVE ALERTS STRIP ────────────────────────────────────────
+// Persistent bar showing time-critical items regardless of panel state
+
+function ActiveAlerts({ state }) {
+  const { missions, dockEvents, unlocked } = state;
+  if (!missions.length && (!unlocked.dock || !dockEvents.length)) return null;
+
+  return (
+    <div style={{ padding: '6px 14px', background: '#0b0d0b', borderBottom: `1px solid ${BD}` }}>
+      {missions.map(m => {
+        const def = m.type === 'anomaly' ? ANOMALY_MISSION : MISSIONS[m.type];
+        const returning = m.timer <= 10;
+        return (
+          <div key={m.id} style={{
+            display: 'flex', justifyContent: 'space-between',
+            fontSize: 11, marginBottom: missions.length > 1 ? 2 : 0,
+          }}>
+            <span style={{ color: returning ? G : A }}>
+              {returning ? '↓' : '↑'} {def.name} · {m.crewCount} crew
+            </span>
+            <span style={{
+              color: returning ? G : DIM,
+              animation: returning ? 'pulse 0.8s ease-in-out infinite' : 'none',
+            }}>
+              {m.timer}s
+            </span>
+          </div>
+        );
+      })}
+      {unlocked.dock && dockEvents.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+          {(() => {
+            const minTimer = Math.min(...dockEvents.map(e => e.timer));
+            const urgent = minTimer <= 8;
+            return (
+              <>
+                <span style={{ color: urgent ? R : A }}>
+                  ⚡ dock · {dockEvents.length} event{dockEvents.length !== 1 ? 's' : ''}
+                </span>
+                <span style={{
+                  color: urgent ? R : DIM,
+                  animation: urgent ? 'pulse 0.6s ease-in-out infinite' : 'none',
+                }}>
+                  {minTimer}s
+                </span>
+              </>
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── OBJECTIVES STRIP ───────────────────────────────────────────
+// Always-visible goals derived from current game state
+
+function getObjectives(state) {
+  const objectives = [];
+  const done = state.completedResearch;
+
+  if (!state.unlocked.surfaceOps) {
+    const remaining = Math.max(0, 30 - state.totalPartsCollected);
+    if (remaining > 0) {
+      objectives.push({ text: `collect ${remaining} more parts to unlock surface ops`, key: 'parts' });
+    } else {
+      objectives.push({ text: 'surface ops unlocking…', key: 'surf' });
+    }
+    if (state.crew.length < state.maxCrew) {
+      objectives.push({ text: 'build crew quarters to recruit more hands', key: 'quarters' });
+    }
+  } else if (!state.unlocked.dock) {
+    objectives.push({ text: 'complete a surface mission to open the dock', key: 'dock' });
+    if (state.crew.length < state.maxCrew) {
+      objectives.push({ text: 'expand crew capacity with crew quarters', key: 'quarters' });
+    }
+  } else if (!state.unlocked.research) {
+    objectives.push({ text: 'dock online — research terminal incoming', key: 'research' });
+  } else {
+    // Research progression goals
+    const tier1Done = done.includes('efficientRecycling') && done.includes('drillUpgrades');
+    const tier2Done = done.includes('advancedHydroponics') && done.includes('secondShuttle');
+    const tier3Done = done.includes('fusionCore') && done.includes('crewExpansion');
+    const tier4Done = done.includes('deepOrbitScanner') && done.includes('warpBeacon');
+
+    if (!tier1Done) {
+      objectives.push({ text: 'research tier 1 technologies in the research terminal', key: 'r1' });
+    } else if (!tier2Done) {
+      objectives.push({ text: 'unlock tier 2 research — run digs to gather artifacts', key: 'r2' });
+    } else if (!tier3Done) {
+      objectives.push({ text: 'push into tier 3 — fusion core and crew expansion', key: 'r3' });
+    } else if (!tier4Done) {
+      objectives.push({ text: 'research the warp beacon — rescue is within reach', key: 'beacon' });
+    } else {
+      objectives.push({ text: 'activate the warp beacon to signal for rescue', key: 'win' });
+    }
+
+    // Secondary goal: always have a crew/build goal
+    if (state.crew.length < state.maxCrew && state.maxCrew < 8) {
+      objectives.push({ text: 'build crew quarters to grow your team', key: 'q2' });
+    } else if (state.crew.length < 6) {
+      objectives.push({ text: 'accept crew from the dock to staff more roles', key: 'crew' });
+    }
+  }
+
+  return objectives.slice(0, 2);
+}
+
+function ObjectivesStrip({ state }) {
+  if (state.gameWon) return null;
+  const objectives = getObjectives(state);
+  if (!objectives.length) return null;
+
+  return (
+    <div style={{
+      padding: '8px 14px',
+      background: '#0a0c0a',
+      borderBottom: `1px solid ${BD}`,
+    }}>
+      <div style={{ fontSize: 9, color: DIM, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 5 }}>
+        objectives
+      </div>
+      {objectives.map(obj => (
+        <div key={obj.key} style={{ fontSize: 11, color: '#4ccc66', lineHeight: 1.7 }}>
+          › {obj.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── STATUS ──────────────────────────────────────────────────────
 
 function StatusSection({ state, rates }) {
   const { powerRate, o2Rate, foodRate, partsRate, creditsRate } = rates;
   return (
     <div>
-      <ResourceBar label="Power"   value={state.power}   cap={state.powerCap}   rate={powerRate}   />
-      <ResourceBar label="O₂"      value={state.o2}      cap={state.o2Cap}      rate={o2Rate}      />
-      <ResourceBar label="Food"    value={state.food}    cap={state.foodCap}    rate={foodRate}    />
-      <ResourceBar label="Parts"   value={state.parts}   cap={state.partsCap}   rate={partsRate}   />
-      <ResourceBar label="Credits" value={state.credits} cap={state.creditsCap} rate={creditsRate} />
+      {/* Survival resources — warn when critically low */}
+      <ResourceBar label="Power"   value={state.power}   cap={state.powerCap}   rate={powerRate}   isSurvival />
+      <ResourceBar label="O₂"      value={state.o2}      cap={state.o2Cap}      rate={o2Rate}      isSurvival />
+      <ResourceBar label="Food"    value={state.food}    cap={state.foodCap}    rate={foodRate}    isSurvival />
+      {/* Inventory resources — blue, no warning */}
+      <ResourceBar label="Parts"   value={state.parts}   cap={state.partsCap}   rate={partsRate}   isSurvival={false} />
+      <ResourceBar label="Credits" value={state.credits} cap={state.creditsCap} rate={creditsRate} isSurvival={false} />
       {state.unlocked.research && (
-        <ResourceBar label="Artifact" value={state.artifacts} cap={state.artifactsCap} rate={0} />
+        <ResourceBar label="Artifact" value={state.artifacts} cap={state.artifactsCap} rate={0} isSurvival={false} />
       )}
       {state.gameWon && (
         <div style={{
@@ -293,6 +436,10 @@ function SurfaceOpsSection({ state, dispatch }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {Object.values(allMissions).map(m => {
             const sel = state.selectedMission === m.id;
+            const rw = m.getRewards ? m.getRewards(state.missionCrewCount) : null;
+            const rewardStr = rw
+              ? Object.entries(rw).map(([k, v]) => k === 'newCrew' ? '+1 crew' : `+${v} ${k}`).join(' · ')
+              : '';
             return (
               <button
                 key={m.id}
@@ -304,11 +451,17 @@ function SurfaceOpsSection({ state, dispatch }) {
                   fontFamily: MN, fontSize: 12,
                   padding: '9px 10px', cursor: 'pointer',
                   textAlign: 'left', minHeight: 44,
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 }}
               >
-                <span>{m.name}</span>
-                <span style={{ color: DIM, fontSize: 11 }}>{m.duration}s · {m.risk}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>{m.name}</span>
+                  <span style={{ color: DIM, fontSize: 11 }}>{m.duration}s · {m.risk}</span>
+                </div>
+                {sel && rewardStr && (
+                  <div style={{ fontSize: 10, color: INV, marginTop: 3 }}>
+                    est. reward ({state.missionCrewCount} crew): {rewardStr}
+                  </div>
+                )}
               </button>
             );
           })}
@@ -555,6 +708,26 @@ export default function App() {
 
   const { open, unlocked, lockedSections } = state;
 
+  // ── Panel summaries (shown when collapsed) ──
+  const { powerRate, o2Rate, foodRate, partsRate, creditsRate } = rates;
+  const statusSummary = `O₂ ${fmt(state.o2)} · Food ${fmt(state.food)} · Power ${fmt(state.power)}`;
+
+  const onMis  = state.missions.reduce((s, m) => s + m.crewCount, 0);
+  const avail  = availCrew(state);
+  const crewSummary = `${state.crew.length} aboard · ${avail} free · ${Object.values(state.roles).reduce((a,b)=>a+b,0)} assigned`;
+
+  const surfSummary = state.missions.length > 0
+    ? `${state.missions.length} mission${state.missions.length > 1 ? 's' : ''} in flight`
+    : 'ready to launch';
+
+  const dockUrgent = state.dockEvents.length > 0
+    ? ` · ${state.dockEvents.length} event${state.dockEvents.length > 1 ? 's' : ''} pending`
+    : '';
+  const dockSummary = `next event ~${state.nextDockEventIn}s${dockUrgent}`;
+
+  const researchDone = state.completedResearch.length;
+  const researchSummary = `${researchDone}/8 complete · ${state.artifacts} artifacts`;
+
   return (
     <div style={{
       maxWidth: 480, margin: '0 auto', padding: '0 0 56px',
@@ -563,7 +736,7 @@ export default function App() {
       {/* ── Header ── */}
       <div style={{
         padding: '18px 14px 14px',
-        borderBottom: `1px solid ${BD}`, marginBottom: 3,
+        borderBottom: `1px solid ${BD}`,
       }}>
         <div style={{ fontSize: 20, letterSpacing: 5, color: G, textTransform: 'uppercase' }}>
           Outpost Zero
@@ -573,19 +746,25 @@ export default function App() {
         </div>
       </div>
 
+      {/* ── Objectives (always visible) ── */}
+      <ObjectivesStrip state={state} />
+
+      {/* ── Active alerts (missions + dock events) ── */}
+      <ActiveAlerts state={state} />
+
       {/* ── Status (always visible) ── */}
-      <Panel title="Status" open={open.status} onToggle={() => tog('status')}>
+      <Panel title="Status" open={open.status} onToggle={() => tog('status')} summary={statusSummary}>
         <StatusSection state={state} rates={rates} />
       </Panel>
 
       {/* ── Crew (always unlocked) ── */}
-      <Panel title="Crew" open={open.crew} onToggle={() => tog('crew')} locked={lockedSections.crew}>
+      <Panel title="Crew" open={open.crew} onToggle={() => tog('crew')} locked={lockedSections.crew} summary={crewSummary}>
         <CrewSection state={state} dispatch={dispatch} />
       </Panel>
 
       {/* ── Surface Ops ── */}
       {unlocked.surfaceOps && (
-        <Panel title="Surface Ops" open={open.surfaceOps} onToggle={() => tog('surfaceOps')} locked={lockedSections.surfaceOps}>
+        <Panel title="Surface Ops" open={open.surfaceOps} onToggle={() => tog('surfaceOps')} locked={lockedSections.surfaceOps} summary={surfSummary}>
           <SurfaceOpsSection state={state} dispatch={dispatch} />
         </Panel>
       )}
@@ -597,6 +776,7 @@ export default function App() {
           badge={state.dockEvents.length > 0 ? `[${state.dockEvents.length}]` : null}
           open={open.dock} onToggle={() => tog('dock')}
           locked={lockedSections.dock}
+          summary={dockSummary}
         >
           <DockSection state={state} dispatch={dispatch} />
         </Panel>
@@ -604,13 +784,13 @@ export default function App() {
 
       {/* ── Research ── */}
       {unlocked.research && (
-        <Panel title="Research" open={open.research} onToggle={() => tog('research')}>
+        <Panel title="Research" open={open.research} onToggle={() => tog('research')} summary={researchSummary}>
           <ResearchSection state={state} dispatch={dispatch} />
         </Panel>
       )}
 
       {/* ── Log (always visible) ── */}
-      <div style={{ marginTop: 3, border: `1px solid ${BD}` }}>
+      <div style={{ marginTop: 2, border: `1px solid ${BD}` }}>
         <div style={{
           padding: '0 12px', minHeight: 44, display: 'flex', alignItems: 'center',
           background: BG2, fontSize: 11, letterSpacing: 2.5, textTransform: 'uppercase', color: DIM,

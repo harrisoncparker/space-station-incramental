@@ -149,15 +149,16 @@ function Panel({ title, badge, open, onToggle, locked, summary, children }) {
   );
 }
 
-// ── ACTIVE ALERTS STRIP ────────────────────────────────────────
+// ── COMMAND FEED ───────────────────────────────────────────────
+// Single always-visible column: live missions → dock events (inline actions) → recent log
 
-function ActiveAlerts({ state }) {
-  const { missions, dockEvents, unlocked } = state;
-  if (!missions.length && (!unlocked.dock || !dockEvents.length)) return null;
+function CommandFeed({ state, dispatch }) {
+  const { missions, dockEvents, unlocked, log } = state;
 
   return (
-    <div style={{ padding: '8px 14px 10px', background: '#0b0d0b', borderBottom: `1px solid ${BD}` }}>
-      {missions.map(m => {
+    <div style={{ padding: '8px 14px 10px', background: '#090b09', borderBottom: `1px solid ${BD}` }}>
+      {/* Active missions */}
+      {missions.map((m, i) => {
         const def = m.type === 'anomaly' ? ANOMALY_MISSION
                   : m.type === 'site'    ? SITE_POOL.find(p => p.id === m.siteId)
                   :                        MISSIONS[m.type];
@@ -165,17 +166,13 @@ function ActiveAlerts({ state }) {
         const returning = m.timer <= 10;
         const pct = m.totalTime > 0 ? m.timer / m.totalTime : 0;
         return (
-          <div key={m.id} style={{ marginBottom: missions.length > 1 || dockEvents.length ? 6 : 0 }}>
-            <div style={{
-              display: 'flex', justifyContent: 'space-between',
-              fontSize: 12, lineHeight: 1.4,
-            }}>
+          <div key={m.id} style={{ marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, lineHeight: 1.4 }}>
               <span style={{ color: returning ? G : A }}>
                 {returning ? '↓' : '↑'} {def.name} · {m.crewCount} crew
               </span>
               <span style={{
-                color: returning ? G : DIM,
-                fontWeight: 'bold',
+                color: returning ? G : DIM, fontWeight: 'bold',
                 animation: returning ? 'pulse 0.8s ease-in-out infinite' : 'none',
               }}>
                 {m.timer}s
@@ -185,27 +182,54 @@ function ActiveAlerts({ state }) {
           </div>
         );
       })}
-      {unlocked.dock && dockEvents.length > 0 && (() => {
-        const minTimer = Math.min(...dockEvents.map(e => e.timer));
-        const urgent = minTimer <= 8;
+
+      {/* Dock events — full info + inline accept/ignore */}
+      {unlocked.dock && dockEvents.map(evt => {
+        const urgent = evt.timer <= 8;
         return (
-          <div>
+          <div key={evt.id} style={{ marginBottom: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, lineHeight: 1.4 }}>
-              <span style={{ color: urgent ? R : A }}>
-                ⚡ dock · {dockEvents.length} event{dockEvents.length !== 1 ? 's' : ''}
-              </span>
+              <span style={{ color: urgent ? R : A }}>⚡ {evt.title}</span>
               <span style={{
-                color: urgent ? R : DIM,
-                fontWeight: 'bold',
+                color: urgent ? R : DIM, fontWeight: 'bold',
                 animation: urgent ? 'pulse 0.6s ease-in-out infinite' : 'none',
               }}>
-                {minTimer}s
+                {evt.timer}s
               </span>
             </div>
-            <ProgressBar pct={minTimer / 20} color={urgent ? R : A} />
+            <div style={{ fontSize: 11, color: DIM, marginTop: 2, marginBottom: 5, lineHeight: 1.5 }}>
+              {evt.desc}
+            </div>
+            <ProgressBar pct={evt.timer / 20} color={urgent ? R : A} height={2} />
+            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              {evt.type === 'inspector' ? (
+                <Btn variant="warn" onClick={() => dispatch({ type: 'DOCK_ACCEPT', id: evt.id })} style={{ flex: 1, fontSize: 11, padding: '7px 10px' }}>Comply</Btn>
+              ) : (
+                <>
+                  <Btn variant="primary" onClick={() => dispatch({ type: 'DOCK_ACCEPT', id: evt.id })} style={{ flex: 1, fontSize: 11, padding: '7px 10px' }}>Accept</Btn>
+                  <Btn variant="warn"    onClick={() => dispatch({ type: 'DOCK_IGNORE', id: evt.id })} style={{ flex: 1, fontSize: 11, padding: '7px 10px' }}>Ignore</Btn>
+                </>
+              )}
+            </div>
           </div>
         );
-      })()}
+      })}
+
+      {/* Recent log entries — flow below live items, lower urgency */}
+      {log.slice(0, 4).map((entry, i) => {
+        const opacity = Math.max(0.18, 1 - i * 0.22);
+        return (
+          <div key={entry.id} style={{
+            fontSize: 11, lineHeight: 1.75,
+            color: i === 0 && (missions.length === 0 && dockEvents.length === 0)
+              ? TX
+              : `rgba(200,200,200,${opacity})`,
+            animation: i === 0 ? 'slideIn 0.3s ease' : 'none',
+          }}>
+            &gt; {entry.text}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -690,45 +714,6 @@ function DockSection({ state, dispatch }) {
 
   return (
     <div>
-      {/* Incoming events */}
-      {state.dockEvents.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 10, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8 }}>
-            Incoming
-          </div>
-          {state.dockEvents.map(evt => {
-            const urgent = evt.timer <= 8;
-            return (
-              <div key={evt.id} style={{
-                marginBottom: 8, padding: '10px',
-                border: `1px solid ${urgent ? R : A}`,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ fontSize: 12, color: TX }}>{evt.title}</span>
-                  <span style={{
-                    fontSize: 13, fontWeight: 'bold',
-                    color: urgent ? R : A,
-                    animation: urgent ? 'pulse 0.6s ease-in-out infinite' : 'none',
-                  }}>{evt.timer}s</span>
-                </div>
-                <div style={{ fontSize: 11, color: DIM, marginBottom: 9, lineHeight: 1.6 }}>{evt.desc}</div>
-                <ProgressBar pct={evt.timer / 20} color={urgent ? R : A} height={2} />
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  {evt.type === 'inspector' ? (
-                    <Btn variant="warn" onClick={() => dispatch({ type: 'DOCK_ACCEPT', id: evt.id })} style={{ flex: 1, fontSize: 12 }}>Comply</Btn>
-                  ) : (
-                    <>
-                      <Btn variant="primary" onClick={() => dispatch({ type: 'DOCK_ACCEPT', id: evt.id })} style={{ flex: 1, fontSize: 12 }}>Accept</Btn>
-                      <Btn variant="warn"    onClick={() => dispatch({ type: 'DOCK_IGNORE', id: evt.id })} style={{ flex: 1, fontSize: 12 }}>Ignore</Btn>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
       {/* In-transit deliveries */}
       {state.outgoingDeliveries.length > 0 && (
         <div style={{ marginBottom: 12 }}>
@@ -769,9 +754,6 @@ function DockSection({ state, dispatch }) {
           : 'Hire Specialist — 80 credits'}
       </Btn>
 
-      <div style={{ fontSize: 10, color: DIM, marginTop: 12, lineHeight: 1.8 }}>
-        next event in ~{state.nextDockEventIn}s
-      </div>
     </div>
   );
 }
@@ -844,30 +826,6 @@ function ResearchSection({ state, dispatch }) {
 
 // ── LOG ────────────────────────────────────────────────────────
 
-function LogSection({ log }) {
-  return (
-    <div style={{ padding: '8px 12px 14px', borderTop: `1px solid ${BD}` }}>
-      {log.map((entry, i) => {
-        const age    = Math.min(i / 7, 1);
-        const opacity = Math.max(0.18, 1 - age * 0.82);
-        return (
-          <div
-            key={entry.id}
-            style={{
-              fontSize: 12, lineHeight: 1.75,
-              color: i === 0 ? TX : `rgba(200,200,200,${opacity})`,
-              animation: i === 0 ? 'slideIn 0.3s ease' : 'none',
-            }}
-          >
-            &gt; {entry.text}
-          </div>
-        );
-      })}
-      {log.length === 0 && <span style={{ fontSize: 11, color: DIM }}>—</span>}
-    </div>
-  );
-}
-
 // ── ROOT APP ───────────────────────────────────────────────────
 
 export default function App() {
@@ -914,8 +872,8 @@ export default function App() {
 
   const dockEvtCount = state.dockEvents.length;
   const dockSummary = dockEvtCount > 0
-    ? <span><span style={{ color: A }}>{dockEvtCount} event{dockEvtCount > 1 ? 's' : ''}</span><span style={{ color: DIM }}> · next ~{state.nextDockEventIn}s</span></span>
-    : <span style={{ color: DIM }}>next ~{state.nextDockEventIn}s</span>;
+    ? <span style={{ color: A }}>{dockEvtCount} incoming · supply &amp; hires available</span>
+    : <span style={{ color: DIM }}>supply drops · crew hires</span>;
 
   const researchDone = state.completedResearch.length;
   const researchSummary = (
@@ -932,23 +890,40 @@ export default function App() {
       minHeight: '100vh', background: BG, fontFamily: MN, color: TX,
     }}>
       {/* ── Header ── */}
-      <div style={{
-        padding: '18px 14px 14px',
-        borderBottom: `1px solid ${BD}`,
-      }}>
-        <div style={{ fontSize: 20, letterSpacing: 5, color: G, textTransform: 'uppercase' }}>
-          Outpost Zero
+      <div style={{ padding: '14px 14px 0', borderBottom: `1px solid ${BD}` }}>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+          paddingBottom: 10,
+        }}>
+          <div style={{ fontSize: 18, letterSpacing: 4, color: G, textTransform: 'uppercase' }}>
+            Outpost Zero
+          </div>
+          <div style={{ fontSize: 10, color: DIM, letterSpacing: 1 }}>
+            eridu-7 · t+{state.tick}s
+          </div>
         </div>
-        <div style={{ fontSize: 10, color: DIM, marginTop: 3, letterSpacing: 1 }}>
-          orbital station manager · t+{state.tick}s
-        </div>
+        {/* Contact timer — compact row with inline fill bar */}
+        {unlocked.dock && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10 }}>
+            <span style={{ fontSize: 10, color: DIM, flexShrink: 0, minWidth: 86 }}>
+              contact: {state.nextDockEventIn}s
+            </span>
+            <div style={{ flex: 1, height: 2, background: '#181818', borderRadius: 1, overflow: 'hidden' }}>
+              <div style={{
+                width: `${Math.max(0, Math.min(100, (1 - state.nextDockEventIn / 65) * 100))}%`,
+                height: '100%', background: '#3a3a3a', borderRadius: 1,
+                transition: 'width 1s linear',
+              }} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Objectives (always visible) ── */}
       <ObjectivesStrip state={state} />
 
-      {/* ── Active alerts (missions + dock events) ── */}
-      <ActiveAlerts state={state} />
+      {/* ── Command feed: missions + dock events + recent log ── */}
+      <CommandFeed state={state} dispatch={dispatch} />
 
       {/* ── Status ── */}
       <Panel title="Status" open={open.status} onToggle={() => tog('status')} summary={statusSummary}>
@@ -976,7 +951,6 @@ export default function App() {
       {unlocked.dock && (
         <Panel
           title="Dock"
-          badge={state.dockEvents.length > 0 ? `[${state.dockEvents.length}]` : null}
           open={open.dock} onToggle={() => tog('dock')}
           locked={lockedSections.dock}
           summary={dockSummary}
@@ -992,16 +966,6 @@ export default function App() {
         </Panel>
       )}
 
-      {/* ── Log (always visible) ── */}
-      <div style={{ marginTop: 2, border: `1px solid ${BD}` }}>
-        <div style={{
-          padding: '0 12px', minHeight: 44, display: 'flex', alignItems: 'center',
-          background: BG2, fontSize: 11, letterSpacing: 2.5, textTransform: 'uppercase', color: DIM,
-        }}>
-          Log
-        </div>
-        <LogSection log={state.log} />
-      </div>
     </div>
   );
 }

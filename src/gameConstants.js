@@ -12,12 +12,65 @@ export const CREW_NAME_POOL = [
 ];
 
 export const ROLES = [
-  { id: 'engineer',    name: 'Engineer',     prodDesc: '+1.0 Power/s',  res: 'power' },
-  { id: 'lifeSupport', name: 'Life Support', prodDesc: '+0.5 O₂/s',     res: 'o2'    },
-  { id: 'hydroponics', name: 'Hydroponics',  prodDesc: '+0.3 Food/s',   res: 'food'  },
-  { id: 'technician',  name: 'Technician',   prodDesc: '+0.2 Parts/s',  res: 'parts' },
-  { id: 'comms',       name: 'Comms',        prodDesc: 'Dock frequency',res: null    },
+  { id: 'lifeSupport', name: 'Life Support', prodDesc: '+0.5 O₂/s',      res: 'o2'    },
+  { id: 'hydroponics', name: 'Hydroponics',  prodDesc: '+0.3 Food/s',    res: 'food'  },
+  { id: 'technician',  name: 'Technician',   prodDesc: '+0.2 Parts/s',   res: 'parts' },
+  { id: 'comms',       name: 'Comms',        prodDesc: '+0.05 Credits/s', res: null    },
 ];
+
+// ── Buildings ─────────────────────────────────────────────────
+// Buildings are the primary progression track: construct → unlock mechanic.
+// Research is the secondary track: spend artifacts → improve existing mechanics.
+
+export const BUILDINGS = {
+  shuttleBay: {
+    id: 'shuttleBay',
+    name: 'Shuttle Bay',
+    desc: 'Hangar for surface deployment vehicles.',
+    flavor: 'we can reach the surface.',
+    cost: { parts: 30 },
+    unlocks: 'surfaceOps',
+    requires: [],
+  },
+  commsArray: {
+    id: 'commsArray',
+    name: 'Comms Array',
+    desc: 'Long-range communication and docking beacon.',
+    flavor: 'we are no longer alone out here.',
+    cost: { parts: 20, credits: 15 },
+    unlocks: 'dock',
+    requires: ['shuttleBay'],
+  },
+  researchLab: {
+    id: 'researchLab',
+    name: 'Research Lab',
+    desc: 'Artifact analysis and technology development.',
+    flavor: 'what did they leave behind?',
+    cost: { parts: 30, credits: 25, artifacts: 5 },
+    unlocks: 'research',
+    requires: ['commsArray'],
+  },
+  storageModule: {
+    id: 'storageModule',
+    name: 'Storage Module',
+    desc: 'Expanded capacity for all stored resources.',
+    flavor: 'room to breathe.',
+    cost: { parts: 40, credits: 25 },
+    unlocks: null,
+    effect: 'storageCap',
+    requires: ['shuttleBay'],
+  },
+  signalBooster: {
+    id: 'signalBooster',
+    name: 'Signal Booster',
+    desc: 'Amplifies the dock beacon signal range.',
+    flavor: 'they can hear us now.',
+    cost: { parts: 35, credits: 40 },
+    unlocks: null,
+    effect: 'dockFrequency',
+    requires: ['commsArray'],
+  },
+};
 
 export const MISSIONS = {
   mining: {
@@ -76,9 +129,9 @@ export const RESEARCH_TREE = {
     tier: 2, artifactCost: 35, creditCost: 35,
     requires: ['drillUpgrades'],
   },
-  fusionCore: {
-    id: 'fusionCore', name: 'Fusion Core',
-    desc: 'Power generation +80%',
+  expeditionPlanning: {
+    id: 'expeditionPlanning', name: 'Expedition Planning',
+    desc: 'Mission duration -30%',
     tier: 3, artifactCost: 90, creditCost: 90,
     requires: ['advancedHydroponics'],
   },
@@ -92,7 +145,7 @@ export const RESEARCH_TREE = {
     id: 'deepOrbitScanner', name: 'Deep Orbit Scanner',
     desc: 'Unlocks anomaly missions',
     tier: 4, artifactCost: 200, creditCost: 200,
-    requires: ['fusionCore'],
+    requires: ['expeditionPlanning'],
   },
   warpBeacon: {
     id: 'warpBeacon', name: 'Warp Beacon',
@@ -103,7 +156,7 @@ export const RESEARCH_TREE = {
 };
 
 export const RESOURCE_LABELS = {
-  power: 'Power', o2: 'O₂', food: 'Food',
+  o2: 'O₂', food: 'Food',
   parts: 'Parts', credits: 'Credits', artifacts: 'Artifacts',
 };
 

@@ -6,7 +6,7 @@ import { gameReducer, computeRates } from './gameReducer';
 import { INITIAL_STATE } from './gameState';
 import {
   ROLES, MISSIONS, ANOMALY_MISSION, RESEARCH_TREE,
-  QUARTERS_BASE_COST, QUARTERS_SCALE,
+  BUILDINGS, QUARTERS_BASE_COST, QUARTERS_SCALE,
 } from './gameConstants';
 
 // ── Palette ────────────────────────────────────────────────────
@@ -74,7 +74,15 @@ function Btn({ children, onClick, variant = 'default', disabled, style = {} }) {
   );
 }
 
-// isSurvival=true → warning colours + pulse when critical (Power/O₂/Food)
+function ProgressBar({ pct, color, height = 3 }) {
+  return (
+    <div style={{ height, background: '#181818', marginTop: 4, borderRadius: 1 }}>
+      <div style={{ width: `${Math.max(0, Math.min(100, pct * 100))}%`, height: '100%', background: color, transition: 'width 1s linear', borderRadius: 1 }} />
+    </div>
+  );
+}
+
+// isSurvival=true → warning colours + pulse when critical (O₂/Food)
 // isSurvival=false → neutral inventory colour, no panic (Parts/Credits/Artifacts)
 function ResourceBar({ label, value, cap, rate, isSurvival = true }) {
   const pct  = cap > 0 ? Math.min(1, value / cap) : 0;
@@ -123,9 +131,8 @@ function Panel({ title, badge, open, onToggle, locked, summary, children }) {
           {badge ? <span style={{ color: A, marginLeft: 10, fontSize: 12 }}>{badge}</span> : null}
           {locked ? <span style={{ color: R, marginLeft: 10, fontSize: 10 }}>[LOCKED {locked}s]</span> : null}
         </span>
-        {/* Summary line shown when panel is collapsed */}
         {!open && !locked && summary && (
-          <span style={{ fontSize: 10, color: DIM, flex: 1, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+          <span style={{ fontSize: 10, flex: 1, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
             {summary}
           </span>
         )}
@@ -143,108 +150,115 @@ function Panel({ title, badge, open, onToggle, locked, summary, children }) {
 }
 
 // ── ACTIVE ALERTS STRIP ────────────────────────────────────────
-// Persistent bar showing time-critical items regardless of panel state
 
 function ActiveAlerts({ state }) {
   const { missions, dockEvents, unlocked } = state;
   if (!missions.length && (!unlocked.dock || !dockEvents.length)) return null;
 
   return (
-    <div style={{ padding: '6px 14px', background: '#0b0d0b', borderBottom: `1px solid ${BD}` }}>
+    <div style={{ padding: '8px 14px 10px', background: '#0b0d0b', borderBottom: `1px solid ${BD}` }}>
       {missions.map(m => {
         const def = m.type === 'anomaly' ? ANOMALY_MISSION : MISSIONS[m.type];
         const returning = m.timer <= 10;
+        const pct = m.totalTime > 0 ? m.timer / m.totalTime : 0;
         return (
-          <div key={m.id} style={{
-            display: 'flex', justifyContent: 'space-between',
-            fontSize: 11, marginBottom: missions.length > 1 ? 2 : 0,
-          }}>
-            <span style={{ color: returning ? G : A }}>
-              {returning ? '↓' : '↑'} {def.name} · {m.crewCount} crew
-            </span>
-            <span style={{
-              color: returning ? G : DIM,
-              animation: returning ? 'pulse 0.8s ease-in-out infinite' : 'none',
+          <div key={m.id} style={{ marginBottom: missions.length > 1 || dockEvents.length ? 6 : 0 }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              fontSize: 12, lineHeight: 1.4,
             }}>
-              {m.timer}s
-            </span>
+              <span style={{ color: returning ? G : A }}>
+                {returning ? '↓' : '↑'} {def.name} · {m.crewCount} crew
+              </span>
+              <span style={{
+                color: returning ? G : DIM,
+                fontWeight: 'bold',
+                animation: returning ? 'pulse 0.8s ease-in-out infinite' : 'none',
+              }}>
+                {m.timer}s
+              </span>
+            </div>
+            <ProgressBar pct={pct} color={returning ? G : A} />
           </div>
         );
       })}
-      {unlocked.dock && dockEvents.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-          {(() => {
-            const minTimer = Math.min(...dockEvents.map(e => e.timer));
-            const urgent = minTimer <= 8;
-            return (
-              <>
-                <span style={{ color: urgent ? R : A }}>
-                  ⚡ dock · {dockEvents.length} event{dockEvents.length !== 1 ? 's' : ''}
-                </span>
-                <span style={{
-                  color: urgent ? R : DIM,
-                  animation: urgent ? 'pulse 0.6s ease-in-out infinite' : 'none',
-                }}>
-                  {minTimer}s
-                </span>
-              </>
-            );
-          })()}
-        </div>
-      )}
+      {unlocked.dock && dockEvents.length > 0 && (() => {
+        const minTimer = Math.min(...dockEvents.map(e => e.timer));
+        const urgent = minTimer <= 8;
+        return (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, lineHeight: 1.4 }}>
+              <span style={{ color: urgent ? R : A }}>
+                ⚡ dock · {dockEvents.length} event{dockEvents.length !== 1 ? 's' : ''}
+              </span>
+              <span style={{
+                color: urgent ? R : DIM,
+                fontWeight: 'bold',
+                animation: urgent ? 'pulse 0.6s ease-in-out infinite' : 'none',
+              }}>
+                {minTimer}s
+              </span>
+            </div>
+            <ProgressBar pct={minTimer / 20} color={urgent ? R : A} />
+          </div>
+        );
+      })()}
     </div>
   );
 }
 
 // ── OBJECTIVES STRIP ───────────────────────────────────────────
-// Always-visible goals derived from current game state
 
 function getObjectives(state) {
   const objectives = [];
   const done = state.completedResearch;
+  const built = state.constructedBuildings;
 
-  if (!state.unlocked.surfaceOps) {
-    const remaining = Math.max(0, 30 - state.totalPartsCollected);
-    if (remaining > 0) {
-      objectives.push({ text: `collect ${remaining} more parts to unlock surface ops`, key: 'parts' });
+  // Early game: building the station
+  if (!built.includes('shuttleBay')) {
+    if (state.parts >= 30) {
+      objectives.push({ text: 'shuttle bay ready to construct', key: 'build-shuttle' });
     } else {
-      objectives.push({ text: 'surface ops unlocking…', key: 'surf' });
+      objectives.push({ text: 'gather parts to construct a shuttle bay', key: 'parts' });
     }
-    if (state.crew.length < state.maxCrew) {
-      objectives.push({ text: 'build crew quarters to recruit more hands', key: 'quarters' });
-    }
-  } else if (!state.unlocked.dock) {
-    objectives.push({ text: 'complete a surface mission to open the dock', key: 'dock' });
-    if (state.crew.length < state.maxCrew) {
-      objectives.push({ text: 'expand crew capacity with crew quarters', key: 'quarters' });
-    }
-  } else if (!state.unlocked.research) {
-    objectives.push({ text: 'dock online — research terminal incoming', key: 'research' });
+  } else if (!built.includes('commsArray')) {
+    objectives.push({ text: 'construct a comms array to contact passing ships', key: 'build-comms' });
+  } else if (!built.includes('researchLab')) {
+    objectives.push({ text: 'build a research lab to study recovered artifacts', key: 'build-research' });
   } else {
     // Research progression goals
     const tier1Done = done.includes('efficientRecycling') && done.includes('drillUpgrades');
     const tier2Done = done.includes('advancedHydroponics') && done.includes('secondShuttle');
-    const tier3Done = done.includes('fusionCore') && done.includes('crewExpansion');
-    const tier4Done = done.includes('deepOrbitScanner') && done.includes('warpBeacon');
+    const tier3Done = done.includes('expeditionPlanning') && done.includes('crewExpansion');
 
     if (!tier1Done) {
-      objectives.push({ text: 'research tier 1 technologies in the research terminal', key: 'r1' });
+      objectives.push({ text: 'analyse artifacts to develop new technologies', key: 'r1' });
     } else if (!tier2Done) {
-      objectives.push({ text: 'unlock tier 2 research — run digs to gather artifacts', key: 'r2' });
+      objectives.push({ text: 'push deeper into the ruins — advanced research awaits', key: 'r2' });
     } else if (!tier3Done) {
-      objectives.push({ text: 'push into tier 3 — fusion core and crew expansion', key: 'r3' });
-    } else if (!tier4Done) {
-      objectives.push({ text: 'research the warp beacon — rescue is within reach', key: 'beacon' });
+      objectives.push({ text: 'the anomaly readings are getting stronger', key: 'r3' });
+    } else if (!done.includes('warpBeacon')) {
+      objectives.push({ text: 'the warp beacon is within reach — signal for rescue', key: 'beacon' });
     } else {
-      objectives.push({ text: 'activate the warp beacon to signal for rescue', key: 'win' });
+      objectives.push({ text: 'activate the warp beacon', key: 'win' });
     }
+  }
 
-    // Secondary goal: always have a crew/build goal
-    if (state.crew.length < state.maxCrew && state.maxCrew < 8) {
-      objectives.push({ text: 'build crew quarters to grow your team', key: 'q2' });
-    } else if (state.crew.length < 6) {
-      objectives.push({ text: 'accept crew from the dock to staff more roles', key: 'crew' });
+  // Secondary: always show a station-building goal if one is available
+  const nextBuilding = Object.values(BUILDINGS).find(b =>
+    !built.includes(b.id) && b.requires.every(r => built.includes(r))
+  );
+  if (nextBuilding && objectives[0]?.key !== `build-${nextBuilding.id}`) {
+    // Don't duplicate if primary already covers it
+    const already = objectives.some(o => o.key.startsWith('build-'));
+    if (!already) {
+      objectives.push({ text: `${nextBuilding.name.toLowerCase()} available for construction`, key: `build-${nextBuilding.id}` });
     }
+  }
+
+  // Crew growth hint
+  if (state.crew.length >= state.maxCrew && state.maxCrew < 8 && built.includes('shuttleBay')) {
+    objectives.push({ text: 'expand crew quarters to take on more hands', key: 'q' });
   }
 
   return objectives.slice(0, 2);
@@ -276,11 +290,10 @@ function ObjectivesStrip({ state }) {
 // ── STATUS ──────────────────────────────────────────────────────
 
 function StatusSection({ state, rates }) {
-  const { powerRate, o2Rate, foodRate, partsRate, creditsRate } = rates;
+  const { o2Rate, foodRate, partsRate, creditsRate } = rates;
   return (
     <div>
       {/* Survival resources — warn when critically low */}
-      <ResourceBar label="Power"   value={state.power}   cap={state.powerCap}   rate={powerRate}   isSurvival />
       <ResourceBar label="O₂"      value={state.o2}      cap={state.o2Cap}      rate={o2Rate}      isSurvival />
       <ResourceBar label="Food"    value={state.food}    cap={state.foodCap}    rate={foodRate}    isSurvival />
       {/* Inventory resources — blue, no warning */}
@@ -304,6 +317,88 @@ function StatusSection({ state, rates }) {
   );
 }
 
+// ── STATION (construction) ──────────────────────────────────────
+
+function StationSection({ state, dispatch }) {
+  const built = state.constructedBuildings;
+  const total = state.crew.length;
+
+  const q          = state.quartersBuilt;
+  const partsCost  = Math.ceil(QUARTERS_BASE_COST.parts   * Math.pow(QUARTERS_SCALE, q));
+  const creditCost = Math.ceil(QUARTERS_BASE_COST.credits * Math.pow(QUARTERS_SCALE, q));
+  const canBuildQ  = state.parts >= partsCost && state.credits >= creditCost;
+
+  return (
+    <div>
+      {/* One-time station buildings */}
+      {Object.values(BUILDINGS).map(b => {
+        const isDone   = built.includes(b.id);
+        const reqsMet  = b.requires.every(r => built.includes(r));
+        const canAfford = Object.entries(b.cost).every(([res, amt]) => (state[res] || 0) >= amt);
+        const canBuild  = !isDone && reqsMet && canAfford;
+
+        return (
+          <div key={b.id} style={{
+            marginBottom: 6, padding: '9px 10px',
+            border: `1px solid ${isDone ? '#1a2a1a' : reqsMet ? BD : '#141414'}`,
+            opacity: isDone ? 0.55 : reqsMet ? 1 : 0.4,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, color: isDone ? G : TX }}>
+                  {isDone ? '✓ ' : ''}{b.name}
+                </div>
+                <div style={{ fontSize: 11, color: DIM, marginTop: 2 }}>{b.desc}</div>
+                {!isDone && (
+                  <div style={{ fontSize: 10, color: DIM, marginTop: 4 }}>
+                    {Object.entries(b.cost).map(([res, amt]) => `${amt} ${res}`).join(' · ')}
+                    {!reqsMet && <span style={{ color: R }}> · locked</span>}
+                    {reqsMet && !canAfford && <span style={{ color: R }}> · insufficient</span>}
+                  </div>
+                )}
+              </div>
+              {!isDone && reqsMet && (
+                <Btn
+                  variant={canBuild ? 'primary' : 'default'}
+                  onClick={() => dispatch({ type: 'BUILD', buildingId: b.id })}
+                  disabled={!canBuild}
+                  style={{ fontSize: 11, padding: '9px 12px', flexShrink: 0 }}
+                >
+                  Build
+                </Btn>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Crew Quarters (repeatable) */}
+      <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BD}` }}>
+        <div style={{ fontSize: 10, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>
+          Crew Quarters
+        </div>
+        <div style={{ fontSize: 11, color: DIM, marginBottom: 7 }}>
+          {q} built · capacity {state.maxCrew}
+          {total < state.maxCrew
+            ? <span style={{ color: G }}> · {state.maxCrew - total} berth{state.maxCrew - total !== 1 ? 's' : ''} available</span>
+            : <span style={{ color: A }}> · full</span>}
+        </div>
+        <Btn
+          variant={canBuildQ ? 'primary' : 'default'}
+          onClick={() => dispatch({ type: 'BUILD_QUARTERS' })}
+          disabled={!canBuildQ}
+          style={{ width: '100%', textAlign: 'center', fontSize: 12 }}
+        >
+          Build Quarters — {partsCost} parts · {creditCost} credits
+        </Btn>
+        <div style={{ fontSize: 10, color: DIM, marginTop: 6 }}>
+          crew arrive automatically when berths are available.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── CREW ────────────────────────────────────────────────────────
 
 function CrewSection({ state, dispatch }) {
@@ -311,11 +406,6 @@ function CrewSection({ state, dispatch }) {
   const inj    = state.crew.filter(c => c.status === 'injured').length;
   const avail  = availCrew(state);
   const total  = state.crew.length;
-
-  const q          = state.quartersBuilt;
-  const partsCost  = Math.ceil(QUARTERS_BASE_COST.parts   * Math.pow(QUARTERS_SCALE, q));
-  const creditCost = Math.ceil(QUARTERS_BASE_COST.credits * Math.pow(QUARTERS_SCALE, q));
-  const canBuild   = state.parts >= partsCost && state.credits >= creditCost;
 
   return (
     <div>
@@ -349,30 +439,6 @@ function CrewSection({ state, dispatch }) {
         );
       })}
 
-      {/* Crew Quarters */}
-      <div style={{ marginTop: 14 }}>
-        <div style={{ fontSize: 10, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>
-          Crew Quarters
-        </div>
-        <div style={{ fontSize: 11, color: DIM, marginBottom: 7 }}>
-          {q} built · capacity {state.maxCrew}
-          {total < state.maxCrew
-            ? <span style={{ color: G }}> · {state.maxCrew - total} berth{state.maxCrew - total !== 1 ? 's' : ''} available</span>
-            : <span style={{ color: A }}> · full</span>}
-        </div>
-        <Btn
-          variant={canBuild ? 'primary' : 'default'}
-          onClick={() => dispatch({ type: 'BUILD_QUARTERS' })}
-          disabled={!canBuild}
-          style={{ width: '100%', textAlign: 'center', fontSize: 12 }}
-        >
-          Build Quarters — {partsCost} parts · {creditCost} credits
-        </Btn>
-        <div style={{ fontSize: 10, color: DIM, marginTop: 6 }}>
-          crew migrate via the dock when berths are available.
-        </div>
-      </div>
-
       {/* Roster */}
       {state.crew.length > 0 && (
         <div style={{ marginTop: 14 }}>
@@ -401,6 +467,7 @@ function CrewSection({ state, dispatch }) {
 function SurfaceOpsSection({ state, dispatch }) {
   const avail      = availCrew(state);
   const hasScanner = state.completedResearch.includes('deepOrbitScanner');
+  const hasExpPlan = state.completedResearch.includes('expeditionPlanning');
   const maxShuttles = state.completedResearch.includes('secondShuttle') ? 2 : 1;
   const canLaunch  = state.missions.length < maxShuttles && avail >= state.missionCrewCount;
 
@@ -413,7 +480,7 @@ function SurfaceOpsSection({ state, dispatch }) {
       {/* Active missions */}
       {state.missions.map(m => {
         const def  = m.type === 'anomaly' ? ANOMALY_MISSION : MISSIONS[m.type];
-        const pct  = m.timer / m.totalTime;
+        const pct  = m.totalTime > 0 ? m.timer / m.totalTime : 0;
         return (
           <div key={m.id} style={{ marginBottom: 12, padding: '10px 10px 8px', border: `1px solid ${BD}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
@@ -423,9 +490,7 @@ function SurfaceOpsSection({ state, dispatch }) {
             <div style={{ fontSize: 10, color: DIM, marginBottom: 7 }}>
               {m.crewCount} crew · {def.risk} risk
             </div>
-            <div style={{ height: 3, background: '#181818' }}>
-              <div style={{ width: `${pct * 100}%`, height: '100%', background: A, transition: 'width 1s linear' }} />
-            </div>
+            <ProgressBar pct={pct} color={A} />
           </div>
         );
       })}
@@ -440,6 +505,8 @@ function SurfaceOpsSection({ state, dispatch }) {
             const rewardStr = rw
               ? Object.entries(rw).map(([k, v]) => k === 'newCrew' ? '+1 crew' : `+${v} ${k}`).join(' · ')
               : '';
+            const durMult = hasExpPlan ? 0.7 : 1.0;
+            const displayDur = Math.ceil(m.duration * durMult);
             return (
               <button
                 key={m.id}
@@ -455,7 +522,7 @@ function SurfaceOpsSection({ state, dispatch }) {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>{m.name}</span>
-                  <span style={{ color: DIM, fontSize: 11 }}>{m.duration}s · {m.risk}</span>
+                  <span style={{ color: DIM, fontSize: 11 }}>{displayDur}s · {m.risk}</span>
                 </div>
                 {sel && rewardStr && (
                   <div style={{ fontSize: 10, color: INV, marginTop: 3 }}>
@@ -514,7 +581,7 @@ function SurfaceOpsSection({ state, dispatch }) {
 
 // ── DOCK ────────────────────────────────────────────────────────
 
-const SUPPLY_RES = ['power', 'o2', 'food', 'parts'];
+const SUPPLY_RES = ['o2', 'food', 'parts'];
 
 function DockSection({ state, dispatch }) {
   const canSupply = state.credits >= 30;
@@ -544,9 +611,16 @@ function DockSection({ state, dispatch }) {
                   }}>{evt.timer}s</span>
                 </div>
                 <div style={{ fontSize: 11, color: DIM, marginBottom: 9, lineHeight: 1.6 }}>{evt.desc}</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <Btn variant="primary" onClick={() => dispatch({ type: 'DOCK_ACCEPT', id: evt.id })} style={{ flex: 1, fontSize: 12 }}>Accept</Btn>
-                  <Btn variant="warn"    onClick={() => dispatch({ type: 'DOCK_IGNORE', id: evt.id })} style={{ flex: 1, fontSize: 12 }}>Ignore</Btn>
+                <ProgressBar pct={evt.timer / 20} color={urgent ? R : A} height={2} />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  {evt.type === 'inspector' ? (
+                    <Btn variant="warn" onClick={() => dispatch({ type: 'DOCK_ACCEPT', id: evt.id })} style={{ flex: 1, fontSize: 12 }}>Comply</Btn>
+                  ) : (
+                    <>
+                      <Btn variant="primary" onClick={() => dispatch({ type: 'DOCK_ACCEPT', id: evt.id })} style={{ flex: 1, fontSize: 12 }}>Accept</Btn>
+                      <Btn variant="warn"    onClick={() => dispatch({ type: 'DOCK_IGNORE', id: evt.id })} style={{ flex: 1, fontSize: 12 }}>Ignore</Btn>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -596,7 +670,6 @@ function DockSection({ state, dispatch }) {
 
       <div style={{ fontSize: 10, color: DIM, marginTop: 12, lineHeight: 1.8 }}>
         next event in ~{state.nextDockEventIn}s
-        {state.reputation > 0 && <span style={{ color: A }}> · reputation: {state.reputation}</span>}
       </div>
     </div>
   );
@@ -709,24 +782,48 @@ export default function App() {
   const { open, unlocked, lockedSections } = state;
 
   // ── Panel summaries (shown when collapsed) ──
-  const { powerRate, o2Rate, foodRate, partsRate, creditsRate } = rates;
-  const statusSummary = `O₂ ${fmt(state.o2)} · Food ${fmt(state.food)} · Power ${fmt(state.power)}`;
+  const o2Col  = state.o2 / state.o2Cap < 0.2 ? A : G;
+  const fCol   = state.food / state.foodCap < 0.2 ? A : G;
+  const statusSummary = (
+    <span>
+      <span style={{ color: o2Col }}>O₂ {fmt(state.o2)}</span>
+      <span style={{ color: DIM }}> · </span>
+      <span style={{ color: fCol }}>Food {fmt(state.food)}</span>
+      <span style={{ color: DIM }}> · </span>
+      <span style={{ color: INV }}>Parts {fmt(state.parts)}</span>
+    </span>
+  );
 
-  const onMis  = state.missions.reduce((s, m) => s + m.crewCount, 0);
-  const avail  = availCrew(state);
-  const crewSummary = `${state.crew.length} aboard · ${avail} free · ${Object.values(state.roles).reduce((a,b)=>a+b,0)} assigned`;
+  const builtCount = state.constructedBuildings.length;
+  const totalBuildings = Object.keys(BUILDINGS).length;
+  const stationSummary = `${builtCount}/${totalBuildings} built · ${state.quartersBuilt} quarters`;
+
+  const avail = availCrew(state);
+  const crewSummary = (
+    <span>
+      <span style={{ color: G }}>{state.crew.length}</span>
+      <span style={{ color: DIM }}> aboard · </span>
+      <span style={{ color: avail > 0 ? G : A }}>{avail} free</span>
+    </span>
+  );
 
   const surfSummary = state.missions.length > 0
-    ? `${state.missions.length} mission${state.missions.length > 1 ? 's' : ''} in flight`
-    : 'ready to launch';
+    ? <span><span style={{ color: A }}>{state.missions.length} in flight</span></span>
+    : <span style={{ color: DIM }}>ready</span>;
 
-  const dockUrgent = state.dockEvents.length > 0
-    ? ` · ${state.dockEvents.length} event${state.dockEvents.length > 1 ? 's' : ''} pending`
-    : '';
-  const dockSummary = `next event ~${state.nextDockEventIn}s${dockUrgent}`;
+  const dockEvtCount = state.dockEvents.length;
+  const dockSummary = dockEvtCount > 0
+    ? <span><span style={{ color: A }}>{dockEvtCount} event{dockEvtCount > 1 ? 's' : ''}</span><span style={{ color: DIM }}> · next ~{state.nextDockEventIn}s</span></span>
+    : <span style={{ color: DIM }}>next ~{state.nextDockEventIn}s</span>;
 
   const researchDone = state.completedResearch.length;
-  const researchSummary = `${researchDone}/8 complete · ${state.artifacts} artifacts`;
+  const researchSummary = (
+    <span>
+      <span style={{ color: G }}>{researchDone}/8</span>
+      <span style={{ color: DIM }}> · </span>
+      <span style={{ color: INV }}>{fmt(state.artifacts)} artifacts</span>
+    </span>
+  );
 
   return (
     <div style={{
@@ -752,12 +849,17 @@ export default function App() {
       {/* ── Active alerts (missions + dock events) ── */}
       <ActiveAlerts state={state} />
 
-      {/* ── Status (always visible) ── */}
+      {/* ── Status ── */}
       <Panel title="Status" open={open.status} onToggle={() => tog('status')} summary={statusSummary}>
         <StatusSection state={state} rates={rates} />
       </Panel>
 
-      {/* ── Crew (always unlocked) ── */}
+      {/* ── Station (construction) ── */}
+      <Panel title="Station" open={open.station} onToggle={() => tog('station')} summary={stationSummary}>
+        <StationSection state={state} dispatch={dispatch} />
+      </Panel>
+
+      {/* ── Crew ── */}
       <Panel title="Crew" open={open.crew} onToggle={() => tog('crew')} locked={lockedSections.crew} summary={crewSummary}>
         <CrewSection state={state} dispatch={dispatch} />
       </Panel>

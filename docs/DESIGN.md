@@ -5,103 +5,110 @@
 
 ---
 
-## Current Design Loop: Iteration 2
+## Current Design Loop: Iteration 3
 
-**Playtest date:** 2026-04-16
+**Playtest date:** 2026-04-17
 **Status:** Changes implemented. Awaiting playtest feedback.
 
-### Playtest Brief (Iteration 2)
+### Playtest Brief (Iteration 3)
 
-Play the game with these specific questions in mind:
+Play for **15–20 minutes** focusing on these questions:
 
-1. **Resource clarity** — Do Parts, Credits, and Artifacts feel clearly separate from Power/O₂/Food? Does the dashboard feel less noisy?
-2. **Panel summaries** — Can you keep panels collapsed and still feel informed? Does the summary line in each header give you enough at-a-glance info?
-3. **Urgency strip** — Do you notice the alert bar at the top when a mission is running or a dock event arrives? Does it reduce missed dock events?
-4. **Objectives** — Do the listed objectives help orient you? Do they feel achievable? Do they ever feel wrong or misleading?
-5. **Mission rewards** — Is it now clear that sending more crew gets better rewards?
+1. **Building progression** — Does constructing the Shuttle Bay, Comms Array, and Research Lab feel like meaningful achievements? Does each unlock feel earned?
+2. **Two-track clarity** — Is the distinction between buildings (unlock mechanics) and research (improve mechanics) clear and satisfying?
+3. **Early game pacing** — With only O₂/Food/Parts visible and the Station panel guiding you, does the start feel more focused? Or still too much?
+4. **Urgency strip** — The progress bars and larger text — do you notice missions and dock events reliably?
+5. **Auto-boarding crew** — Migrants now board automatically when berths are available. Does this feel right, or did you miss the choice?
+6. **Inspector forced compliance** — Inspectors now lock sections automatically (no ignore option). Does this feel appropriately disruptive?
+7. **Panel summaries with colour** — Are the coloured resource values in collapsed headers useful at a glance?
+
+Don't worry about: archaeology theme depth (T-007, coming next), power (removed per your request).
 
 ---
 
 ## Design Theories
 
 ### T-001 · Resource Dual Classification
-**Status:** ✅ Implemented (Iteration 2)
+**Status:** ✅ Confirmed (Iteration 2 → 3)
 
-**Observation:** Credits flash warning indicators when low, but low credits isn't dangerous — it just means you can't buy things. Same for Parts (low = slow) and Artifacts (low = can't research). Only Power, O₂, and Food cause crew death.
-
-**Theory:** Treating survival resources (Power, O₂, Food) differently from inventory resources (Parts, Credits, Artifacts) will reduce UI noise and help players correctly prioritise what needs attention.
-
-**Hypothesis:** Players will feel less overwhelmed by warning signals and will correctly identify actual emergencies vs. "I'm just broke."
-
-**Implementation:** ResourceBar accepts `isSurvival` prop. Survival resources use warning colours (amber/red) and pulse animation at low levels. Inventory resources use a neutral blue colour with no pulse.
+**Verdict:** Player confirmed "I like the colours there are no alarms for inventory items." Theory validated.
 
 ---
 
 ### T-002 · Collapsed Panel Summaries
-**Status:** ✅ Implemented (Iteration 2)
+**Status:** ✅ Confirmed, iterated (Iteration 3)
 
-**Observation:** Players want to collapse panels to reduce clutter but lose all information when they do.
-
-**Theory:** Showing a one-line summary in each panel header when collapsed lets players keep the UI compact without going blind.
-
-**Hypothesis:** Players will collapse panels more and feel less stressed about missing information.
-
-**Implementation:** Panel component accepts `summary` prop, shown inline in header when closed.
+**Verdict:** Player liked the concept. Iteration 3 adds colour-coded values (O₂ in green/amber, Parts in blue) per player request for "more colour to make it more readable at a glance."
 
 ---
 
 ### T-003 · Time-Critical Urgency Strip
-**Status:** ✅ Implemented (Iteration 2)
+**Status:** ✅ Iterated (Iteration 3)
 
-**Observation:** Dock events expire in 20 seconds and are easy to miss if the Dock panel is collapsed. Mission return timers are buried inside Surface Ops.
-
-**Theory:** A persistent strip between the header and panels showing active missions and dock events (especially urgent ones) will surface time-sensitive information regardless of panel state.
-
-**Hypothesis:** Players will miss fewer dock events and feel more in-control of time-pressure moments.
-
-**Implementation:** `ActiveAlerts` strip always rendered when there are active missions or dock events. Dock events flash red when ≤8s remaining.
+**Verdict:** Player said "really nice although it could be a bit larger" and wanted "semi graphical element like a loading bar." Iteration 3 adds progress bars and increases text size to 12px.
 
 ---
 
-### T-004 · Visible Objectives
-**Status:** ✅ Implemented (Iteration 2)
+### T-004 · Visible Objectives → Immersive Objectives
+**Status:** ✅ Overhauled (Iteration 3)
 
-**Observation:** Player reported "the game lacks goals — I want to feel like I'm working towards something." No short- or medium-term goals are surfaced to the player. Progression milestones exist in the reducer but are invisible.
+**Observation from playtest 2:** Player wanted objectives to be "more immersive intrinsic objectives" rather than "collect X of Y to unlock Z."
 
-**Theory:** Displaying 1–3 contextual objectives derived from current game state will give the player clear direction and a sense of progress.
+**Theory:** Objectives should read like narrative goals, not checklists. "gather parts to construct a shuttle bay" > "collect 30 parts to unlock surface ops."
 
-**Hypothesis:** Players will have clearer intent at each phase of the game and spend less time wondering what to do next.
-
-**Implementation:** `ObjectivesStrip` below header, computed from game state. Shows current milestone, next unlock target, and a research/build goal.
+**Implementation:** Objectives now reference buildings by name and use narrative language. Secondary objectives highlight available constructions.
 
 ---
 
 ### T-005 · Mission Crew Reward Clarity
-**Status:** ✅ Implemented (Iteration 2)
+**Status:** ✅ Confirmed (Iteration 2)
 
-**Observation:** Player asked "do I get more resources if I send more people?" — this mechanic exists but is invisible in the UI.
-
-**Theory:** Showing estimated rewards per crew count in the mission selector will make the crew/reward tradeoff legible and encourage strategic crew allocation.
-
-**Implementation:** Mission selector shows reward preview that updates as crew count changes.
+**Verdict:** Player said "the mission reward change is good." Iteration 3 also shows adjusted duration when Expedition Planning is researched.
 
 ---
 
-### T-006 · Power as a Meaningful Resource
-**Status:** 📋 Theory — Not Yet Implemented
+### T-006 · Power Resource Removal
+**Status:** ✅ Implemented (Iteration 3)
 
-**Observation:** Power constantly caps at 100. Base generation (+2.0/s) alone fills the cap. Players have no reason to assign engineers and no reason to care about power as a system.
+**Observation:** Power was always at 100%, served no purpose, and created a meaningless Engineer role.
 
-**Theory:** Power should be a constrained and strategically interesting resource. Options:
-- A. **Power consumers**: Station modules (research terminal, dock beacon, life support upgrades) draw power. Engineers become critical for enabling those systems.
-- B. **Reduced base generation**: Set base to +0.5/s so engineers matter from the start.
-- C. **Power grid events**: Occasional power spikes/outages that require engineer headcount to resolve.
+**Decision:** Remove entirely. Power resource, Engineer role, and Fusion Core research all removed. Replaced Fusion Core with Expedition Planning (-30% mission duration) which serves the same tree position but addresses a real player need (dig grind).
 
-**Recommended direction:** Combine B + A. Reduce base power to +0.5/s. As the player builds modules, those modules draw power, creating an ongoing tension between engineer allocation and other roles.
+---
 
-**Hypothesis:** Players will have a reason to assign engineers and actively manage power as a resource.
+### T-011 · Building-Based Progression (Two-Track System)
+**Status:** ✅ Implemented (Iteration 3)
 
-**Risk:** If power scarcity is too punishing early, it may compound O₂/Food stress in an unfun way. Test carefully.
+**Observation:** Player said "unlocking the missions could be something you need to build" and "there are two tracks — buildings unlock mechanics and research improves efficiency."
+
+**Theory:** Replacing invisible threshold-based unlocks with explicit player-constructed buildings creates agency, clarity, and a sense of achievement. The game now has two clean progression tracks:
+- **Buildings**: Shuttle Bay → Comms Array → Research Lab (+ Storage Module, Signal Booster). Each building unlocks a game section.
+- **Research**: Spend artifacts + credits to improve existing systems (efficiency, capacity, capabilities).
+
+**Buildings implemented:**
+| Building | Cost | Effect |
+|----------|------|--------|
+| Shuttle Bay | 30 parts | Unlocks Surface Ops |
+| Comms Array | 20 parts, 15 credits | Unlocks Dock |
+| Research Lab | 30 parts, 25 credits, 5 artifacts | Unlocks Research |
+| Storage Module | 40 parts, 25 credits | +50 to resource caps |
+| Signal Booster | 35 parts, 40 credits | Faster dock events |
+
+**Hypothesis:** Players will feel each unlock is earned, understand the two tracks, and have clearer goals.
+
+---
+
+### T-012 · Auto-Resolution for Non-Choice Events
+**Status:** ✅ Implemented (Iteration 3)
+
+**Observation:** Player said "having to make sure you don't miss a notification to fill your new berths seems annoying" and "you shouldn't be able to ignore audits."
+
+**Theory:** Some dock events aren't real choices. Migrants should auto-board when berths are available. Inspectors should auto-lock (mandatory compliance). This reduces friction on non-strategic events and focuses player attention on events that actually require a decision (freighters, refugees, distress signals).
+
+**Implementation:**
+- Migrants auto-board when berths available (speed determined by Comms investment/Signal Booster)
+- Inspectors auto-lock (no ignore button, forced compliance)
+- Reputation system removed (was meaningless with no mechanics attached)
 
 ---
 
@@ -114,73 +121,41 @@ Play the game with these specific questions in mind:
 
 **Proposed mechanics:**
 - Named artifact types (Ancient Navigation Chip, Crystalline Data Core, etc.) with short discovery logs
-- A "Discoveries" section in the log showing notable finds
-- Rare dig events: "The crew uncovers an intact structure — requesting additional survey time." (Extended mission for big reward)
-- Each research tech feels like it's derived from a specific discovery
-
-**Hypothesis:** Players will feel more invested in running digs and research will feel like it has narrative weight.
+- A "Discoveries" section showing notable finds
+- Rare dig events: "The crew uncovers an intact structure" (extended mission for big reward)
+- Research techs feel like they're derived from specific discoveries
 
 ---
 
 ### T-008 · Staged Complexity Onboarding
-**Status:** 📋 Theory — Not Yet Implemented
+**Status:** 🔄 Partially addressed by T-011
 
-**Observation:** Player felt overwhelmed at the start (too much visible immediately) then under-challenged later (mastered everything, got bored). The complexity curve is flat rather than escalating.
-
-**Theory:** The game should start with 2 crew, only survival resources visible, and no crew panel beyond role assignment. Systems should unlock one at a time in response to concrete actions, not just timers.
-
-**Proposed progression gates:**
-- Start: 2 crew, only Power/O₂/Food shown. No parts visible yet.
-- First milestone: Assign all crew to roles → "systems nominal" → Parts resource appears, Technician role appears
-- Second milestone: Accumulate 30 parts → Surface Ops unlock (current)
-- Third milestone: Complete first mission → Dock unlock (current)
-- New milestone: Reach 5 crew → Station Construction panel unlocks (see T-010)
-
-**Hypothesis:** Each new system feels like a reward, and the player spends time mastering each layer before the next arrives.
-
-**Risk:** Hiding content early may frustrate experienced players. Consider a "veteran mode" with everything unlocked from start.
+The building system naturally stages complexity (you see only Status + Station + Crew at start). Further staging (hiding Parts until Technician is assigned, etc.) deferred to see if buildings alone solve it.
 
 ---
 
 ### T-009 · Station Construction Expansion
-**Status:** 📋 Theory — Not Yet Implemented
+**Status:** 🔄 Partially addressed by T-011
 
-**Observation:** "I feel like there should be more that I can build to upgrade my station." Currently only Crew Quarters can be built. This is a classic idle game affordance the player expects.
-
-**Theory:** A dedicated "Construct" tab (or expand Crew tab) with 5–8 buildable modules will give players meaningful agency in customising their station and create a more satisfying mid-game progression loop.
-
-**Proposed modules:**
-| Module | Cost | Effect |
-|--------|------|--------|
-| Solar Array | 30 parts · 20 credits | +1.0 Power/s base |
-| O₂ Scrubber | 25 parts · 20 credits | −15% O₂ consumption |
-| Hydroponics Bay | 35 parts · 25 credits | +0.4 Food/s base (stackable ×2) |
-| Storage Expansion | 40 parts · 30 credits | +50 to all resource caps |
-| Repair Bay | 50 parts · 40 credits | Halves crew injury recovery time |
-| Signal Booster | 30 parts · 50 credits | +50% dock event frequency |
-| Shuttle Bay Ext. | 60 parts · 50 credits | Required for second shuttle (replaces research?) |
-
-**Hypothesis:** Players will feel more invested in their station and have clearer mid-game goals beyond "keep running digs."
+5 buildings implemented. More can be added as the game design matures. Possible future buildings:
+- Repair Bay (faster injury recovery)
+- Hydroponics Bay (base food production)
+- O₂ Scrubber (base O₂ production)
+- Observatory (unlocks some late-game mechanic)
 
 ---
 
 ### T-010 · Achievement-Based Unlocks
-**Status:** 📋 Theory — Not Yet Implemented
+**Status:** 🔄 Addressed by T-011
 
-**Observation:** Player felt progression "doesn't increase much" after initial unlocks. The current system unlocks sections by thresholds (30 parts, 1 mission) but doesn't celebrate or explain these moments.
-
-**Theory:** Frame unlocks as explicit achievements with a moment of recognition. "You've done X — this unlocks Y." Show a brief unlock notification rather than just auto-opening a panel.
-
-**Proposed implementation:**
-- Unlock notifications appear as a prominent log entry with a special style
-- The objectives strip updates to acknowledge the milestone
-- Each unlock has a name/title: "SURFACE ACCESS GRANTED", "DOCK CLEARANCE OBTAINED"
+Building construction IS the achievement. Each building creates a visible, player-driven unlock moment with a log message and flavor text.
 
 ---
 
 ## Discarded Theories
 
-*(none yet)*
+### T-006 (original) · Power as a Meaningful Resource
+**Discarded:** Player requested removal. Power was consistently at 100% and added no strategic depth. Removed entirely in Iteration 3.
 
 ---
 
@@ -189,4 +164,5 @@ Play the game with these specific questions in mind:
 | Iteration | Date | Key Changes | Verdict |
 |-----------|------|-------------|---------|
 | 1 | 2026-04-16 | Initial prototype | First playtest complete |
-| 2 | 2026-04-16 | T-001 through T-005 | Awaiting playtest |
+| 2 | 2026-04-16 | Resource classification, objectives, urgency strip, panel summaries, reward preview | Colours confirmed, objectives needed narrative voice |
+| 3 | 2026-04-17 | Building system, power removed, auto-resolve events, immersive objectives, urgency bars, coloured summaries | Awaiting playtest |

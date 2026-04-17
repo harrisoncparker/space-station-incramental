@@ -3,7 +3,7 @@
 // ============================================================
 import {
   CREW_NAME_POOL, MISSIONS, ANOMALY_MISSION, RESEARCH_TREE,
-  QUARTERS_BASE_COST, QUARTERS_SCALE,
+  BUILDINGS, QUARTERS_BASE_COST, QUARTERS_SCALE,
 } from './gameConstants';
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -45,9 +45,6 @@ export function computeRates(s) {
   const alive = s.crew.length;
   const injured = s.crew.filter(c => c.status === 'injured').length;
 
-  let powerRate = 2.0 + roles.engineer * 1.0;
-  if (R.includes('fusionCore')) powerRate *= 1.8;
-
   const o2Mult = R.includes('efficientRecycling') ? 0.8 : 1.0;
   const o2Consume = (alive * 0.12 + injured * 0.12) * o2Mult;
   const o2Rate = roles.lifeSupport * 0.5 - o2Consume;
@@ -61,14 +58,13 @@ export function computeRates(s) {
 
   const creditsRate = roles.comms * 0.05;
 
-  return { powerRate, o2Rate, foodRate, partsRate, creditsRate };
+  return { o2Rate, foodRate, partsRate, creditsRate };
 }
 
 // Generate a dock event
 function genDockEvent(s) {
   const id = s.eventIdCounter;
   const hasRoom = s.crew.length < s.maxCrew;
-  // Migrants only appear when quarters are available; weight toward them when there's room
   const pool = ['freighter','freighter','drone','drone','inspector','distress'];
   if (hasRoom) { pool.push('migrant','migrant','migrant','refugee'); }
   const type = pool[Math.floor(Math.random() * pool.length)];
@@ -91,7 +87,7 @@ function genDockEvent(s) {
       desc: `${count} survivor(s) — costs ${count*15} food + ${count*8} O₂.` };
   }
   if (type === 'drone') {
-    const resources = ['power','o2','food','parts','credits'];
+    const resources = ['o2','food','parts','credits'];
     const res = resources[Math.floor(Math.random() * resources.length)];
     const amount = 8 + Math.floor(Math.random() * 15);
     return { ...base, res, amount,
@@ -101,27 +97,66 @@ function genDockEvent(s) {
   if (type === 'inspector') {
     const targets = ['crew','surfaceOps','dock'];
     const section = targets[Math.floor(Math.random() * targets.length)];
-    return { ...base, section, lockDuration: 30,
+    return { ...base, section, lockDuration: 30, autoAccept: true,
       title: 'corporate inspector inbound.',
-      desc: `audit in progress. ${section} locked for 30s.` };
+      desc: `mandatory audit. ${section} locked for 30s.` };
   }
   if (type === 'migrant') {
     const name = pickName(s.crew.map(c => c.name));
-    const flavors = [
-      `${name} is drifting in on a salvage vessel. seeking work.`,
-      `${name} hailing from the outer belt. requests permission to board.`,
-      `${name} arrived via transit shuttle. looking for a berth.`,
-      `${name} was crew on a decommissioned freighter. wants aboard.`,
-    ];
-    return { ...base, crewName: name,
-      title: `${name} requests permission to board.`,
-      desc: flavors[Math.floor(Math.random() * flavors.length)] };
+    return { ...base, crewName: name, autoAccept: true,
+      title: `${name} has boarded the station.`,
+      desc: `${name} arrived looking for work. assigned to available berth.` };
   }
   // distress
   return { ...base,
     foodCost: 15, o2Cost: 10,
     title: 'distress signal detected.',
     desc: 'help costs 15 food + 10 O₂. ignoring gains reputation.' };
+}
+
+// Resolve a dock event (shared by auto-accept and manual accept)
+function resolveEvent(s, evt) {
+  if (evt.type === 'freighter') {
+    if (s.credits < evt.cost) return addLog(s, 'not enough credits. freighter departs.');
+    s = { ...s, credits: s.credits - evt.cost, [evt.res]: clamp(s[evt.res] + evt.amount, 0, s[evt.res + 'Cap']) };
+    return addLog(s, `trade complete. received ${evt.amount} ${evt.res}.`);
+  }
+  if (evt.type === 'refugee') {
+    if (s.food < evt.foodCost || s.o2 < evt.o2Cost) return addLog(s, 'insufficient resources. refugee ship turns away.');
+    if (s.crew.length >= s.maxCrew) return addLog(s, 'crew quarters full. refugee ship turns away.');
+    s = { ...s, food: s.food - evt.foodCost, o2: s.o2 - evt.o2Cost };
+    let added = 0;
+    while (s.crew.length < s.maxCrew && added < evt.count) {
+      const name = pickName(s.crew.map(c => c.name));
+      s = { ...s, crew: [...s.crew, { id: s.crewIdCounter, name, status: 'available', injuredTimer: 0 }], crewIdCounter: s.crewIdCounter + 1 };
+      s = addLog(s, `${name} boards from the refugee ship.`);
+      added++;
+    }
+    return s;
+  }
+  if (evt.type === 'drone') {
+    s = { ...s, [evt.res]: clamp(s[evt.res] + evt.amount, 0, s[evt.res + 'Cap']) };
+    return addLog(s, `supply drone received. ${evt.amount} ${evt.res} secured.`);
+  }
+  if (evt.type === 'inspector') {
+    s = { ...s, lockedSections: { ...s.lockedSections, [evt.section]: evt.lockDuration } };
+    return addLog(s, `inspector boards. ${evt.section} locked for ${evt.lockDuration}s.`);
+  }
+  if (evt.type === 'migrant') {
+    if (s.crew.length >= s.maxCrew) return addLog(s, 'no quarters available. traveller moved on.');
+    s = {
+      ...s,
+      crew: [...s.crew, { id: s.crewIdCounter, name: evt.crewName, status: 'available', injuredTimer: 0 }],
+      crewIdCounter: s.crewIdCounter + 1,
+    };
+    return addLog(s, `${evt.crewName} joins the crew.`);
+  }
+  if (evt.type === 'distress') {
+    if (s.food < evt.foodCost || s.o2 < evt.o2Cost) return addLog(s, 'insufficient resources. distress signal unanswered.');
+    s = { ...s, food: s.food - evt.foodCost, o2: s.o2 - evt.o2Cost };
+    return addLog(s, 'distress signal answered. resources dispatched.');
+  }
+  return s;
 }
 
 // ── Main Reducer ──────────────────────────────────────────────
@@ -132,13 +167,12 @@ export function gameReducer(state, action) {
     // ── TICK ────────────────────────────────────────────────
     case 'TICK': {
       let s = { ...state, tick: state.tick + 1 };
-      const { powerRate, o2Rate, foodRate, partsRate, creditsRate } = computeRates(s);
+      const { o2Rate, foodRate, partsRate, creditsRate } = computeRates(s);
 
       // Apply resource rates
       const newParts = clamp(s.parts + partsRate, 0, s.partsCap);
       s = {
         ...s,
-        power:   clamp(s.power   + powerRate,   0, s.powerCap),
         o2:      clamp(s.o2      + o2Rate,      0, s.o2Cap),
         food:    clamp(s.food    + foodRate,    0, s.foodCap),
         parts:   newParts,
@@ -156,7 +190,7 @@ export function gameReducer(state, action) {
         let excess = totalAssigned(s.roles) - (s.crew.length - crewOnMission(s.missions));
         if (excess > 0) {
           const newRoles = { ...s.roles };
-          for (const r of ['comms','technician','hydroponics','lifeSupport','engineer']) {
+          for (const r of ['comms','technician','hydroponics','lifeSupport']) {
             while (newRoles[r] > 0 && excess > 0) { newRoles[r]--; excess--; }
           }
           s = { ...s, roles: newRoles };
@@ -232,15 +266,19 @@ export function gameReducer(state, action) {
       if (nextIn <= 0 && s.unlocked.dock) {
         if (s.dockEvents.length < 3) {
           const evt = genDockEvent(s);
-          s = {
-            ...s,
-            dockEvents: [...s.dockEvents, evt],
-            eventIdCounter: evt.eventIdCounter,
-          };
-          s = addLog(s, evt.title);
+          s = { ...s, eventIdCounter: evt.eventIdCounter };
+
+          if (evt.autoAccept) {
+            // Auto-resolve: inspectors and migrants don't wait for input
+            s = resolveEvent(s, evt);
+          } else {
+            s = { ...s, dockEvents: [...s.dockEvents, evt] };
+            s = addLog(s, evt.title);
+          }
         }
         const commsBonus = s.roles.comms * 8;
-        nextIn = Math.max(20, 45 + Math.floor(Math.random() * 46) - commsBonus);
+        const baseDock = s.constructedBuildings.includes('signalBooster') ? 30 : 45;
+        nextIn = Math.max(15, baseDock + Math.floor(Math.random() * 46) - commsBonus);
       }
       s = { ...s, nextDockEventIn: nextIn };
 
@@ -278,33 +316,57 @@ export function gameReducer(state, action) {
       }
       s = { ...s, lockedSections: newLocked };
 
-      // Unlock progression
-      if (!s.unlocked.surfaceOps && s.totalPartsCollected >= 30) {
-        s = {
-          ...s,
-          unlocked: { ...s.unlocked, surfaceOps: true },
-          open: { ...s.open, surfaceOps: true },
-        };
-        s = addLog(s, 'surface ops online. shuttle ready for deployment.');
-      }
-      if (!s.unlocked.dock && s.totalMissionsCompleted >= 1) {
-        s = {
-          ...s,
-          unlocked: { ...s.unlocked, dock: true },
-          open: { ...s.open, dock: true },
-        };
-        s = addLog(s, 'dock systems active. awaiting incoming traffic.');
-      }
-      if (!s.unlocked.research && s.unlocked.dock) {
-        s = {
-          ...s,
-          unlocked: { ...s.unlocked, research: true },
-          open: { ...s.open, research: true },
-        };
-        s = addLog(s, 'research terminal online. knowledge is power.');
-      }
+      // NOTE: No automatic unlock progression here.
+      // All section unlocks happen through the BUILD action.
 
       return s;
+    }
+
+    // ── BUILD (station construction) ────────────────────────
+    case 'BUILD': {
+      const building = BUILDINGS[action.buildingId];
+      if (!building) return state;
+      if (state.constructedBuildings.includes(building.id)) return state;
+
+      // Check prerequisites
+      if (!building.requires.every(r => state.constructedBuildings.includes(r))) return state;
+
+      // Check costs
+      for (const [res, amount] of Object.entries(building.cost)) {
+        if ((state[res] || 0) < amount) return state;
+      }
+
+      // Deduct costs
+      let s = { ...state };
+      for (const [res, amount] of Object.entries(building.cost)) {
+        s = { ...s, [res]: s[res] - amount };
+      }
+
+      s = { ...s, constructedBuildings: [...s.constructedBuildings, building.id] };
+
+      // Apply section unlock
+      if (building.unlocks) {
+        s = {
+          ...s,
+          unlocked: { ...s.unlocked, [building.unlocks]: true },
+          open: { ...s.open, [building.unlocks]: true },
+        };
+      }
+
+      // Apply building-specific effects
+      if (building.effect === 'storageCap') {
+        s = {
+          ...s,
+          o2Cap: s.o2Cap + 50,
+          foodCap: s.foodCap + 50,
+          partsCap: s.partsCap + 50,
+          creditsCap: s.creditsCap + 250,
+          artifactsCap: s.artifactsCap + 25,
+        };
+      }
+      // signalBooster effect is applied in the dock event countdown (TICK)
+
+      return addLog(s, `${building.name.toLowerCase()} constructed. ${building.flavor}`);
     }
 
     // ── ASSIGN ROLE ─────────────────────────────────────────
@@ -312,7 +374,6 @@ export function gameReducer(state, action) {
       const { role, delta } = action;
       const newCount = state.roles[role] + delta;
       if (newCount < 0) return state;
-      // Can't assign more than available crew
       const avail = availableCrew(state);
       if (delta > 0 && avail <= 0) return state;
       if (delta > 0 && newCount > state.crew.length - crewOnMission(state.missions)) return state;
@@ -351,13 +412,17 @@ export function gameReducer(state, action) {
       const n = state.missionCrewCount;
       if (availableCrew(state) < n) return state;
       const type = state.selectedMission;
-      // Check anomaly requires research
       if (type === 'anomaly' && !state.completedResearch.includes('deepOrbitScanner')) return state;
       const def = type === 'anomaly' ? ANOMALY_MISSION : MISSIONS[type];
+
+      // Expedition Planning reduces mission duration by 30%
+      const durMult = state.completedResearch.includes('expeditionPlanning') ? 0.7 : 1.0;
+      const duration = Math.ceil(def.duration * durMult);
+
       const mission = {
         id: state.missionIdCounter,
         type, crewCount: n,
-        timer: def.duration, totalTime: def.duration,
+        timer: duration, totalTime: duration,
       };
       let s = {
         ...state,
@@ -372,42 +437,7 @@ export function gameReducer(state, action) {
       const evt = state.dockEvents.find(e => e.id === action.id);
       if (!evt) return state;
       let s = { ...state, dockEvents: state.dockEvents.filter(e => e.id !== action.id) };
-
-      if (evt.type === 'freighter') {
-        if (s.credits < evt.cost) return addLog(s, 'not enough credits. freighter departs.');
-        s = { ...s, credits: s.credits - evt.cost, [evt.res]: clamp(s[evt.res] + evt.amount, 0, s[evt.res + 'Cap']) };
-        s = addLog(s, `trade complete. received ${evt.amount} ${evt.res}.`);
-      } else if (evt.type === 'refugee') {
-        if (s.food < evt.foodCost || s.o2 < evt.o2Cost) return addLog(s, 'insufficient resources. refugee ship turns away.');
-        if (s.crew.length >= s.maxCrew) return addLog(s, 'crew quarters full. refugee ship turns away.');
-        s = { ...s, food: s.food - evt.foodCost, o2: s.o2 - evt.o2Cost };
-        let added = 0;
-        while (s.crew.length < s.maxCrew && added < evt.count) {
-          const name = pickName(s.crew.map(c => c.name));
-          s = { ...s, crew: [...s.crew, { id: s.crewIdCounter, name, status: 'available', injuredTimer: 0 }], crewIdCounter: s.crewIdCounter + 1 };
-          s = addLog(s, `${name} boards from the refugee ship.`);
-          added++;
-        }
-      } else if (evt.type === 'drone') {
-        s = { ...s, [evt.res]: clamp(s[evt.res] + evt.amount, 0, s[evt.res + 'Cap']) };
-        s = addLog(s, `supply drone received. ${evt.amount} ${evt.res} secured.`);
-      } else if (evt.type === 'inspector') {
-        s = { ...s, lockedSections: { ...s.lockedSections, [evt.section]: evt.lockDuration } };
-        s = addLog(s, `inspector boards. ${evt.section} locked for ${evt.lockDuration}s.`);
-      } else if (evt.type === 'migrant') {
-        if (s.crew.length >= s.maxCrew) return addLog(s, 'no quarters available. traveller turned away.');
-        s = {
-          ...s,
-          crew: [...s.crew, { id: s.crewIdCounter, name: evt.crewName, status: 'available', injuredTimer: 0 }],
-          crewIdCounter: s.crewIdCounter + 1,
-        };
-        s = addLog(s, `${evt.crewName} joins the crew.`);
-      } else if (evt.type === 'distress') {
-        if (s.food < evt.foodCost || s.o2 < evt.o2Cost) return addLog(s, 'insufficient resources. distress signal unanswered.');
-        s = { ...s, food: s.food - evt.foodCost, o2: s.o2 - evt.o2Cost };
-        s = addLog(s, 'distress signal answered. resources dispatched.');
-      }
-      return s;
+      return resolveEvent(s, evt);
     }
 
     // ── DOCK EVENT IGNORE ───────────────────────────────────
@@ -415,13 +445,7 @@ export function gameReducer(state, action) {
       const evt = state.dockEvents.find(e => e.id === action.id);
       if (!evt) return state;
       let s = { ...state, dockEvents: state.dockEvents.filter(e => e.id !== action.id) };
-      if (evt.type === 'distress') {
-        s = { ...s, reputation: s.reputation + 10 };
-        s = addLog(s, 'distress signal ignored. reputation logged.');
-      } else {
-        s = addLog(s, `${evt.type} dismissed.`);
-      }
-      return s;
+      return addLog(s, `${evt.type} dismissed.`);
     }
 
     // ── REQUEST SUPPLY DROP ─────────────────────────────────

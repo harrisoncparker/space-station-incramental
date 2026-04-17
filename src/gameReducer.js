@@ -3,7 +3,7 @@
 // ============================================================
 import {
   CREW_NAME_POOL, MISSIONS, ANOMALY_MISSION, RESEARCH_TREE,
-  BUILDINGS, QUARTERS_BASE_COST, QUARTERS_SCALE,
+  BUILDINGS, SITE_POOL, QUARTERS_BASE_COST, QUARTERS_SCALE,
 } from './gameConstants';
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -166,7 +166,11 @@ export function gameReducer(state, action) {
 
     // ── TICK ────────────────────────────────────────────────
     case 'TICK': {
-      let s = { ...state, tick: state.tick + 1 };
+      let s = {
+        ...state,
+        tick: state.tick + 1,
+        scanCooldown: Math.max(0, state.scanCooldown - 1),
+      };
       const { o2Rate, foodRate, partsRate, creditsRate } = computeRates(s);
 
       // Apply resource rates
@@ -218,7 +222,10 @@ export function gameReducer(state, action) {
       s = { ...s, missions: active };
 
       for (const m of done) {
-        const def = m.type === 'anomaly' ? ANOMALY_MISSION : MISSIONS[m.type];
+        const def = m.type === 'anomaly' ? ANOMALY_MISSION
+                  : m.type === 'site'    ? SITE_POOL.find(p => p.id === m.siteId)
+                  :                        MISSIONS[m.type];
+        if (!def) continue;
         const sr = Math.min(0.95, def.baseSuccess + (m.crewCount - 1) * 0.05);
         const success = Math.random() < sr;
 
@@ -412,24 +419,68 @@ export function gameReducer(state, action) {
       const n = state.missionCrewCount;
       if (availableCrew(state) < n) return state;
       const type = state.selectedMission;
-      if (type === 'anomaly' && !state.completedResearch.includes('deepOrbitScanner')) return state;
-      const def = type === 'anomaly' ? ANOMALY_MISSION : MISSIONS[type];
 
-      // Expedition Planning reduces mission duration by 30%
+      // Resolve the mission definition
+      let def, isSite = false, siteId = null;
+      if (type === 'anomaly') {
+        if (!state.completedResearch.includes('deepOrbitScanner')) return state;
+        def = ANOMALY_MISSION;
+      } else if (type.startsWith('site_')) {
+        const sid = type.slice(5); // strip 'site_' prefix
+        const site = state.discoveredSites.find(s => s.id === sid);
+        if (!site) return state;
+        def = SITE_POOL.find(p => p.id === sid);
+        if (!def) return state;
+        isSite = true;
+        siteId = sid;
+      } else {
+        def = MISSIONS[type];
+      }
+      if (!def) return state;
+
       const durMult = state.completedResearch.includes('expeditionPlanning') ? 0.7 : 1.0;
       const duration = Math.ceil(def.duration * durMult);
 
       const mission = {
         id: state.missionIdCounter,
-        type, crewCount: n,
+        type: isSite ? 'site' : type,
+        siteId,
+        crewCount: n,
         timer: duration, totalTime: duration,
       };
+
       let s = {
         ...state,
         missions: [...state.missions, mission],
         missionIdCounter: state.missionIdCounter + 1,
+        // Remove the site from discovered list and reset selection
+        discoveredSites: isSite
+          ? state.discoveredSites.filter(s => s.id !== siteId)
+          : state.discoveredSites,
+        selectedMission: isSite ? 'mining' : state.selectedMission,
       };
-      return addLog(s, `shuttle launched on ${def.name.toLowerCase()}. ${n} crew aboard.`);
+      return addLog(s, `shuttle launched: ${def.name.toLowerCase()}. ${n} crew aboard.`);
+    }
+
+    // ── SCAN ────────────────────────────────────────────────
+    case 'SCAN': {
+      if (!state.constructedBuildings.includes('surfaceScanner')) return state;
+      if (state.scanCooldown > 0) return state;
+      if (state.discoveredSites.length >= 3) return state;
+      if (state.parts < 5) return state;
+
+      const usedIds = state.discoveredSites.map(s => s.id);
+      const available = SITE_POOL.filter(s => !usedIds.includes(s.id));
+      if (!available.length) return state;
+
+      const site = available[Math.floor(Math.random() * available.length)];
+      let s = {
+        ...state,
+        parts: state.parts - 5,
+        scanCooldown: 90,
+        discoveredSites: [...state.discoveredSites, site],
+      };
+      return addLog(s, `scan complete. site identified: ${site.name.toLowerCase()}.`);
     }
 
     // ── DOCK EVENT ACCEPT ───────────────────────────────────

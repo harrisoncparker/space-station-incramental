@@ -32,6 +32,8 @@ export const INITIAL_STATE = {
   missionCrewCount: 1,
   selectedMission: 'mining',
   missionIdCounter: 1,
+  discoveredSites: [],   // sites found by surface scanner, each a one-time mission
+  scanCooldown: 0,       // seconds until next scan available
 
   // ── Dock ─────────────────────────────────────────────────
   dockEvents: [],

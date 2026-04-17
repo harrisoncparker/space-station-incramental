@@ -6,7 +6,7 @@ import { gameReducer, computeRates } from './gameReducer';
 import { INITIAL_STATE } from './gameState';
 import {
   ROLES, MISSIONS, ANOMALY_MISSION, RESEARCH_TREE,
-  BUILDINGS, QUARTERS_BASE_COST, QUARTERS_SCALE,
+  BUILDINGS, QUARTERS_BASE_COST, QUARTERS_SCALE, SITE_POOL,
 } from './gameConstants';
 
 // ── Palette ────────────────────────────────────────────────────
@@ -158,7 +158,10 @@ function ActiveAlerts({ state }) {
   return (
     <div style={{ padding: '8px 14px 10px', background: '#0b0d0b', borderBottom: `1px solid ${BD}` }}>
       {missions.map(m => {
-        const def = m.type === 'anomaly' ? ANOMALY_MISSION : MISSIONS[m.type];
+        const def = m.type === 'anomaly' ? ANOMALY_MISSION
+                  : m.type === 'site'    ? SITE_POOL.find(p => p.id === m.siteId)
+                  :                        MISSIONS[m.type];
+        if (!def) return null;
         const returning = m.timer <= 10;
         const pct = m.totalTime > 0 ? m.timer / m.totalTime : 0;
         return (
@@ -254,6 +257,11 @@ function getObjectives(state) {
     if (!already) {
       objectives.push({ text: `${nextBuilding.name.toLowerCase()} available for construction`, key: `build-${nextBuilding.id}` });
     }
+  }
+
+  // Scanner hint
+  if (built.includes('surfaceScanner') && state.discoveredSites.length === 0 && state.scanCooldown === 0) {
+    objectives.push({ text: 'run a surface scan to locate precursor sites', key: 'scan' });
   }
 
   // Crew growth hint
@@ -465,47 +473,92 @@ function CrewSection({ state, dispatch }) {
 // ── SURFACE OPS ──────────────────────────────────────────────────
 
 function SurfaceOpsSection({ state, dispatch }) {
-  const avail      = availCrew(state);
-  const hasScanner = state.completedResearch.includes('deepOrbitScanner');
-  const hasExpPlan = state.completedResearch.includes('expeditionPlanning');
-  const maxShuttles = state.completedResearch.includes('secondShuttle') ? 2 : 1;
-  const canLaunch  = state.missions.length < maxShuttles && avail >= state.missionCrewCount;
+  const avail           = availCrew(state);
+  const hasScanner      = state.completedResearch.includes('deepOrbitScanner');
+  const hasExpPlan      = state.completedResearch.includes('expeditionPlanning');
+  const hasSurfScanner  = state.constructedBuildings.includes('surfaceScanner');
+  const maxShuttles     = state.completedResearch.includes('secondShuttle') ? 2 : 1;
+  const canLaunch       = state.missions.length < maxShuttles && avail >= state.missionCrewCount;
+  const canScan         = hasSurfScanner && state.scanCooldown === 0
+                          && state.discoveredSites.length < 3 && state.parts >= 5;
 
   const allMissions = { ...MISSIONS, ...(hasScanner ? { anomaly: ANOMALY_MISSION } : {}) };
-  const selDef = allMissions[state.selectedMission] || MISSIONS.mining;
+
+  // Resolve selected mission def (standard, anomaly, or discovered site)
+  let selDef;
+  if (state.selectedMission && state.selectedMission.startsWith('site_')) {
+    const sid = state.selectedMission.slice(5);
+    selDef = SITE_POOL.find(p => p.id === sid) || MISSIONS.mining;
+  } else {
+    selDef = allMissions[state.selectedMission] || MISSIONS.mining;
+  }
+
   const successPct = Math.min(95, Math.round((selDef.baseSuccess + (state.missionCrewCount - 1) * 0.05) * 100));
+  const durMult    = hasExpPlan ? 0.7 : 1.0;
 
   return (
     <div>
       {/* Active missions */}
       {state.missions.map(m => {
-        const def  = m.type === 'anomaly' ? ANOMALY_MISSION : MISSIONS[m.type];
-        const pct  = m.totalTime > 0 ? m.timer / m.totalTime : 0;
+        const def = m.type === 'anomaly' ? ANOMALY_MISSION
+                  : m.type === 'site'    ? SITE_POOL.find(p => p.id === m.siteId)
+                  :                        MISSIONS[m.type];
+        if (!def) return null;
+        const pct = m.totalTime > 0 ? m.timer / m.totalTime : 0;
         return (
           <div key={m.id} style={{ marginBottom: 12, padding: '10px 10px 8px', border: `1px solid ${BD}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-              <span style={{ fontSize: 12, color: G }}>{def.name}</span>
+              <span style={{ fontSize: 12, color: m.type === 'site' ? A : G }}>{def.name}</span>
               <span style={{ fontSize: 12, color: A }}>{m.timer}s remaining</span>
             </div>
             <div style={{ fontSize: 10, color: DIM, marginBottom: 7 }}>
               {m.crewCount} crew · {def.risk} risk
             </div>
-            <ProgressBar pct={pct} color={A} />
+            <ProgressBar pct={pct} color={m.type === 'site' ? A : A} />
           </div>
         );
       })}
+
+      {/* Surface Scanner action */}
+      {hasSurfScanner && (
+        <div style={{ marginBottom: 12, padding: '9px 10px', border: `1px solid ${BD}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, color: TX }}>Surface Scanner</div>
+              <div style={{ fontSize: 10, color: DIM, marginTop: 2 }}>
+                {state.scanCooldown > 0
+                  ? `cooldown: ${state.scanCooldown}s`
+                  : state.discoveredSites.length >= 3
+                  ? 'site queue full (max 3)'
+                  : '5 parts · identifies a precursor site'}
+              </div>
+            </div>
+            <Btn
+              variant={canScan ? 'primary' : 'default'}
+              onClick={() => dispatch({ type: 'SCAN' })}
+              disabled={!canScan}
+              style={{ fontSize: 11, padding: '9px 12px', flexShrink: 0 }}
+            >
+              Scan
+            </Btn>
+          </div>
+          {state.scanCooldown > 0 && (
+            <ProgressBar pct={state.scanCooldown / 90} color={DIM} />
+          )}
+        </div>
+      )}
 
       {/* Mission type selector */}
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 10, color: DIM, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Mission type</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {/* Standard missions */}
           {Object.values(allMissions).map(m => {
             const sel = state.selectedMission === m.id;
             const rw = m.getRewards ? m.getRewards(state.missionCrewCount) : null;
             const rewardStr = rw
               ? Object.entries(rw).map(([k, v]) => k === 'newCrew' ? '+1 crew' : `+${v} ${k}`).join(' · ')
               : '';
-            const durMult = hasExpPlan ? 0.7 : 1.0;
             const displayDur = Math.ceil(m.duration * durMult);
             return (
               <button
@@ -532,6 +585,54 @@ function SurfaceOpsSection({ state, dispatch }) {
               </button>
             );
           })}
+
+          {/* Discovered Precursor sites */}
+          {state.discoveredSites.length > 0 && (
+            <>
+              <div style={{
+                fontSize: 9, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase',
+                marginTop: 6, marginBottom: 2, paddingTop: 8, borderTop: `1px solid ${BD}`,
+              }}>
+                Precursor Sites
+              </div>
+              {state.discoveredSites.map(site => {
+                const mKey = `site_${site.id}`;
+                const sel  = state.selectedMission === mKey;
+                const rw   = site.getRewards ? site.getRewards(state.missionCrewCount) : null;
+                const rewardStr = rw
+                  ? Object.entries(rw).map(([k, v]) => `+${v} ${k}`).join(' · ')
+                  : '';
+                const displayDur = Math.ceil(site.duration * durMult);
+                return (
+                  <button
+                    key={mKey}
+                    onClick={() => dispatch({ type: 'SET_MISSION', missionType: mKey })}
+                    style={{
+                      background: sel ? '#120f00' : 'none',
+                      border: `1px solid ${sel ? A : '#2a2010'}`,
+                      color: sel ? A : '#6a5a30',
+                      fontFamily: MN, fontSize: 12,
+                      padding: '9px 10px', cursor: 'pointer',
+                      textAlign: 'left', minHeight: 44,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>{site.name}</span>
+                      <span style={{ color: sel ? '#6a5a30' : DIM, fontSize: 11 }}>{displayDur}s · {site.risk}</span>
+                    </div>
+                    <div style={{ fontSize: 10, color: sel ? '#6a5a30' : '#2e2510', marginTop: 2, lineHeight: 1.4 }}>
+                      {site.desc}
+                    </div>
+                    {sel && rewardStr && (
+                      <div style={{ fontSize: 10, color: A, marginTop: 4 }}>
+                        est. reward ({state.missionCrewCount} crew): {rewardStr}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </>
+          )}
         </div>
       </div>
 

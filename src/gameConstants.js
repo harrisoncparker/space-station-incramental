@@ -70,7 +70,96 @@ export const BUILDINGS = {
     effect: 'dockFrequency',
     requires: ['commsArray'],
   },
+  surfaceScanner: {
+    id: 'surfaceScanner',
+    name: 'Surface Scanner',
+    desc: 'Deep-penetrating radar for locating Precursor sites.',
+    flavor: 'something is down there. a lot of somethings.',
+    cost: { parts: 25, credits: 20 },
+    unlocks: null,
+    effect: 'scanning',
+    requires: ['shuttleBay'],
+  },
 };
+
+// ── Precursor site pool ───────────────────────────────────────
+// Discovered by scanning. Each is a one-time high-value mission.
+// Sites cycle back into the pool once used.
+
+export const SITE_POOL = [
+  {
+    id: 's01', name: 'Site 7-C',
+    desc: 'Intact subterranean structure. Partial collapse on the eastern face.',
+    baseSuccess: 0.80, risk: 'MED', duration: 90,
+    getRewards: (n) => ({ artifacts: 5 + n * 2, credits: 20 + n * 8 }),
+  },
+  {
+    id: 's02', name: 'Grid Reference 4-North',
+    desc: 'Dense surface deposit concentration. High artifact yield expected.',
+    baseSuccess: 0.80, risk: 'MED', duration: 90,
+    getRewards: (n) => ({ artifacts: 4 + n * 2, credits: 25 + n * 6 }),
+  },
+  {
+    id: 's03', name: 'The Spine',
+    desc: 'A 40km ridge of interlocking Precursor architecture. Origin unclear.',
+    baseSuccess: 0.75, risk: 'MED', duration: 100,
+    getRewards: (n) => ({ artifacts: 6 + n, credits: 30 + n * 5 }),
+  },
+  {
+    id: 's04', name: 'Resonance Point Alpha',
+    desc: 'Low-level energy signature of unknown origin. Non-threatening, probably.',
+    baseSuccess: 0.70, risk: 'HIGH', duration: 90,
+    getRewards: (n) => ({ artifacts: 7 + n * 2, credits: 15 + n * 10 }),
+  },
+  {
+    id: 's05', name: 'Subsurface Void B-7',
+    desc: 'Scanner returns suggest an intact chamber 80 metres below the surface.',
+    baseSuccess: 0.80, risk: 'MED', duration: 110,
+    getRewards: (n) => ({ artifacts: 8 + n, credits: 20 + n * 7 }),
+  },
+  {
+    id: 's06', name: 'The Archive',
+    desc: 'Dense data-medium concentration. The previous team flagged this site.',
+    baseSuccess: 0.75, risk: 'MED', duration: 90,
+    getRewards: (n) => ({ artifacts: 6 + n * 3, credits: 10 + n * 5 }),
+  },
+  {
+    id: 's07', name: 'Terminus Station',
+    desc: 'Appears to be a transit hub of some kind. Scale is disorienting.',
+    baseSuccess: 0.70, risk: 'HIGH', duration: 105,
+    getRewards: (n) => ({ artifacts: 5 + n * 2, credits: 35 + n * 8 }),
+  },
+  {
+    id: 's08', name: 'Signal Source 3',
+    desc: 'Something is still transmitting down there. Short-range. Periodic.',
+    baseSuccess: 0.65, risk: 'HIGH', duration: 90,
+    getRewards: (n) => ({ artifacts: 9 + n * 2, credits: 25 + n * 6 }),
+  },
+  {
+    id: 's09', name: 'The Trench',
+    desc: 'A deep surface fracture exposing older strata. Multiple eras of activity.',
+    baseSuccess: 0.80, risk: 'MED', duration: 95,
+    getRewards: (n) => ({ artifacts: 7 + n * 2, credits: 20 + n * 7 }),
+  },
+  {
+    id: 's10', name: 'Relay Platform',
+    desc: 'A circular structure, possibly communicative in function. Still standing.',
+    baseSuccess: 0.75, risk: 'MED', duration: 90,
+    getRewards: (n) => ({ artifacts: 5 + n, credits: 40 + n * 10 }),
+  },
+  {
+    id: 's11', name: 'Grid Reference 9-East',
+    desc: 'High surface albedo anomaly. Possible exposed alloy deposit.',
+    baseSuccess: 0.85, risk: 'LOW', duration: 80,
+    getRewards: (n) => ({ artifacts: 4 + n, credits: 25 + n * 6, parts: 10 + n * 3 }),
+  },
+  {
+    id: 's12', name: 'The Well',
+    desc: 'A vertical shaft of unknown depth. Scanner returns nothing below 2km.',
+    baseSuccess: 0.65, risk: 'HIGH', duration: 120,
+    getRewards: (n) => ({ artifacts: 10 + n * 3, credits: 15 + n * 5 }),
+  },
+];
 
 export const MISSIONS = {
   mining: {

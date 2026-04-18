@@ -14,8 +14,8 @@ import {
 const G   = '#4cff72';   // green  — healthy / positive
 const A   = '#ffb347';   // amber  — warning
 const R   = '#ff4444';   // red    — critical
-const DIM = '#555';
-const TX  = '#c8c8c8';
+const DIM = '#888';
+const TX  = '#e0e0e0';
 const BG  = '#0a0a0a';
 const BG2 = '#0e0e0e';
 const BD  = '#1e1e1e';
@@ -95,7 +95,7 @@ function ResourceBar({ label, value, cap, rate, isSurvival = true }) {
       marginBottom: 9, minHeight: 24,
       animation: crit ? 'pulse 0.8s ease-in-out infinite' : 'none',
     }}>
-      <span style={{ width: 64, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: col, flexShrink: 0 }}>
+      <span style={{ width: 64, fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: col, flexShrink: 0 }}>
         {label}
       </span>
       <div style={{ flex: 1, height: 5, background: '#161616', position: 'relative', overflow: 'hidden', borderRadius: 1 }}>
@@ -104,7 +104,7 @@ function ResourceBar({ label, value, cap, rate, isSurvival = true }) {
       <span style={{ width: 66, textAlign: 'right', fontSize: 12, color: col, flexShrink: 0 }}>
         {fmt(value)}/{cap}
       </span>
-      <span style={{ width: 58, textAlign: 'right', fontSize: 11, color: rc, flexShrink: 0 }}>
+      <span style={{ width: 58, textAlign: 'right', fontSize: 12, color: rc, flexShrink: 0 }}>
         {fmtRate(rate)}
       </span>
     </div>
@@ -220,7 +220,7 @@ function CommandFeed({ state, dispatch }) {
         const opacity = Math.max(0.18, 1 - i * 0.22);
         return (
           <div key={entry.id} style={{
-            fontSize: 11, lineHeight: 1.75,
+            fontSize: 12, lineHeight: 1.75,
             color: i === 0 && (missions.length === 0 && dockEvents.length === 0)
               ? TX
               : `rgba(200,200,200,${opacity})`,
@@ -307,11 +307,11 @@ function ObjectivesStrip({ state }) {
       background: '#0a0c0a',
       borderBottom: `1px solid ${BD}`,
     }}>
-      <div style={{ fontSize: 9, color: DIM, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 5 }}>
+      <div style={{ fontSize: 10, color: DIM, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 5 }}>
         objectives
       </div>
       {objectives.map(obj => (
-        <div key={obj.key} style={{ fontSize: 11, color: '#4ccc66', lineHeight: 1.7 }}>
+        <div key={obj.key} style={{ fontSize: 12, color: '#4ccc66', lineHeight: 1.7 }}>
           › {obj.text}
         </div>
       ))}
@@ -380,9 +380,9 @@ function StationSection({ state, dispatch }) {
                 <div style={{ fontSize: 13, color: isDone ? G : TX }}>
                   {isDone ? '✓ ' : ''}{b.name}
                 </div>
-                <div style={{ fontSize: 11, color: DIM, marginTop: 2 }}>{b.desc}</div>
+                <div style={{ fontSize: 12, color: DIM, marginTop: 2 }}>{b.desc}</div>
                 {!isDone && (
-                  <div style={{ fontSize: 10, color: DIM, marginTop: 4 }}>
+                  <div style={{ fontSize: 11, color: DIM, marginTop: 4 }}>
                     {Object.entries(b.cost).map(([res, amt]) => `${amt} ${res}`).join(' · ')}
                     {!reqsMet && <span style={{ color: R }}> · locked</span>}
                     {reqsMet && !canAfford && <span style={{ color: R }}> · insufficient</span>}
@@ -406,10 +406,10 @@ function StationSection({ state, dispatch }) {
 
       {/* Crew Quarters (repeatable) */}
       <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BD}` }}>
-        <div style={{ fontSize: 10, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>
+        <div style={{ fontSize: 11, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>
           Crew Quarters
         </div>
-        <div style={{ fontSize: 11, color: DIM, marginBottom: 7 }}>
+        <div style={{ fontSize: 12, color: DIM, marginBottom: 7 }}>
           {q} built · capacity {state.maxCrew}
           {total < state.maxCrew
             ? <span style={{ color: G }}> · {state.maxCrew - total} berth{state.maxCrew - total !== 1 ? 's' : ''} available</span>
@@ -423,7 +423,7 @@ function StationSection({ state, dispatch }) {
         >
           Build Quarters — {partsCost} parts · {creditCost} credits
         </Btn>
-        <div style={{ fontSize: 10, color: DIM, marginTop: 6 }}>
+        <div style={{ fontSize: 11, color: DIM, marginTop: 6 }}>
           crew arrive automatically when berths are available.
         </div>
       </div>
@@ -442,7 +442,7 @@ function CrewSection({ state, dispatch }) {
   return (
     <div>
       {/* Summary */}
-      <div style={{ fontSize: 11, color: DIM, marginBottom: 14, letterSpacing: 0.5, lineHeight: 1.8 }}>
+      <div style={{ fontSize: 12, color: DIM, marginBottom: 14, letterSpacing: 0.5, lineHeight: 1.8 }}>
         {total} aboard · {onMis} on mission · {avail} unassigned
         {inj > 0 && <span style={{ color: A }}> · {inj} injured</span>}
         <span style={{ color: DIM }}> · max {state.maxCrew}</span>
@@ -460,7 +460,7 @@ function CrewSection({ state, dispatch }) {
           }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, color: TX }}>{role.name}</div>
-              <div style={{ fontSize: 10, color: DIM, marginTop: 1 }}>{role.prodDesc}</div>
+              <div style={{ fontSize: 11, color: DIM, marginTop: 1 }}>{role.prodDesc}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
               <Btn onClick={() => dispatch({ type: 'ASSIGN_ROLE', role: role.id, delta: -1 })} disabled={!canDec} style={{ padding: '9px 15px' }}>−</Btn>
@@ -474,11 +474,11 @@ function CrewSection({ state, dispatch }) {
       {/* Roster */}
       {state.crew.length > 0 && (
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 10, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 7 }}>Roster</div>
+          <div style={{ fontSize: 11, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 7 }}>Roster</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {state.crew.map(c => (
               <span key={c.id} style={{
-                fontSize: 11, padding: '4px 8px',
+                fontSize: 12, padding: '4px 8px',
                 border: `1px solid ${c.status === 'injured' ? A : '#222'}`,
                 color: c.status === 'injured' ? A : DIM,
               }}>
@@ -574,7 +574,7 @@ function SurfaceOpsSection({ state, dispatch }) {
 
       {/* Mission type selector */}
       <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 10, color: DIM, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Mission type</div>
+        <div style={{ fontSize: 11, color: DIM, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Mission type</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {/* Standard missions */}
           {Object.values(allMissions).map(m => {
@@ -602,7 +602,7 @@ function SurfaceOpsSection({ state, dispatch }) {
                   <span style={{ color: DIM, fontSize: 11 }}>{displayDur}s · {m.risk}</span>
                 </div>
                 {sel && rewardStr && (
-                  <div style={{ fontSize: 10, color: INV, marginTop: 3 }}>
+                  <div style={{ fontSize: 11, color: INV, marginTop: 3 }}>
                     est. reward ({state.missionCrewCount} crew): {rewardStr}
                   </div>
                 )}
@@ -644,11 +644,11 @@ function SurfaceOpsSection({ state, dispatch }) {
                       <span>{site.name}</span>
                       <span style={{ color: sel ? '#6a5a30' : DIM, fontSize: 11 }}>{displayDur}s · {site.risk}</span>
                     </div>
-                    <div style={{ fontSize: 10, color: sel ? '#6a5a30' : '#2e2510', marginTop: 2, lineHeight: 1.4 }}>
+                    <div style={{ fontSize: 11, color: sel ? '#8a7a50' : '#555', marginTop: 2, lineHeight: 1.4 }}>
                       {site.desc}
                     </div>
                     {sel && rewardStr && (
-                      <div style={{ fontSize: 10, color: A, marginTop: 4 }}>
+                      <div style={{ fontSize: 11, color: A, marginTop: 4 }}>
                         est. reward ({state.missionCrewCount} crew): {rewardStr}
                       </div>
                     )}
@@ -726,12 +726,12 @@ function DockSection({ state, dispatch }) {
       )}
 
       {/* Outgoing panel */}
-      <div style={{ fontSize: 10, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8 }}>
+      <div style={{ fontSize: 11, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8 }}>
         Outgoing
       </div>
 
       <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 11, color: DIM, marginBottom: 7 }}>
+        <div style={{ fontSize: 12, color: DIM, marginBottom: 7 }}>
           Request Supply Drop — 30 credits · 60s delivery
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
@@ -773,7 +773,7 @@ function ResearchSection({ state, dispatch }) {
         return (
           <div key={t} style={{ marginBottom: 16 }}>
             <div style={{
-              fontSize: 10, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase',
+              fontSize: 11, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase',
               marginBottom: 6, paddingBottom: 5, borderBottom: `1px solid ${BD}`,
             }}>
               Tier {t} — {TIER_LABELS[t]}
@@ -795,9 +795,9 @@ function ResearchSection({ state, dispatch }) {
                     <div style={{ fontSize: 13, color: isDone ? G : TX }}>
                       {isDone ? '✓ ' : ''}{tech.name}
                     </div>
-                    <div style={{ fontSize: 11, color: DIM, marginTop: 2 }}>{tech.desc}</div>
+                    <div style={{ fontSize: 12, color: DIM, marginTop: 2 }}>{tech.desc}</div>
                     {!isDone && (
-                      <div style={{ fontSize: 10, color: DIM, marginTop: 4 }}>
+                      <div style={{ fontSize: 11, color: DIM, marginTop: 4 }}>
                         {tech.artifactCost} artifacts · {tech.creditCost} credits
                         {!reqsMet && <span style={{ color: R }}> · locked</span>}
                         {reqsMet && !canAfford && <span style={{ color: R }}> · insufficient resources</span>}

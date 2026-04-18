@@ -321,10 +321,13 @@ function ObjectivesStrip({ state }) {
 
 // ── STATUS ──────────────────────────────────────────────────────
 
+const DESC = { fontSize: 11, color: DIM, marginBottom: 12, lineHeight: 1.5 };
+
 function StatusSection({ state, rates }) {
   const { o2Rate, foodRate, partsRate, creditsRate } = rates;
   return (
     <div>
+      <div style={DESC}>Current resource levels and production rates across all station systems.</div>
       {/* Survival resources — warn when critically low */}
       <ResourceBar label="O₂"      value={state.o2}      cap={state.o2Cap}      rate={o2Rate}      isSurvival />
       <ResourceBar label="Food"    value={state.food}    cap={state.foodCap}    rate={foodRate}    isSurvival />
@@ -362,6 +365,7 @@ function StationSection({ state, dispatch }) {
 
   return (
     <div>
+      <div style={DESC}>Construct buildings to expand station capabilities and unlock new sections.</div>
       {/* One-time station buildings */}
       {Object.values(BUILDINGS).map(b => {
         const isDone   = built.includes(b.id);
@@ -441,6 +445,7 @@ function CrewSection({ state, dispatch }) {
 
   return (
     <div>
+      <div style={DESC}>Assign crew to station roles to keep O₂ and food production running.</div>
       {/* Summary */}
       <div style={{ fontSize: 12, color: DIM, marginBottom: 14, letterSpacing: 0.5, lineHeight: 1.8 }}>
         {total} aboard · {onMis} on mission · {avail} unassigned
@@ -522,6 +527,7 @@ function SurfaceOpsSection({ state, dispatch }) {
 
   return (
     <div>
+      <div style={DESC}>Launch surface missions to recover resources, artifacts, and crew.</div>
       {/* Active missions */}
       {state.missions.map(m => {
         const def = m.type === 'anomaly' ? ANOMALY_MISSION
@@ -714,6 +720,7 @@ function DockSection({ state, dispatch }) {
 
   return (
     <div>
+      <div style={DESC}>Request supply drops and hire specialists from ships passing through the system.</div>
       {/* In-transit deliveries */}
       {state.outgoingDeliveries.length > 0 && (
         <div style={{ marginBottom: 12 }}>
@@ -768,6 +775,7 @@ function ResearchSection({ state, dispatch }) {
 
   return (
     <div>
+      <div style={DESC}>Spend artifacts and credits to develop new technologies and improve station efficiency.</div>
       {tiers.map(t => {
         const techs = Object.values(RESEARCH_TREE).filter(r => r.tier === t);
         return (
@@ -930,14 +938,14 @@ export default function App() {
         <StatusSection state={state} rates={rates} />
       </Panel>
 
-      {/* ── Station (construction) ── */}
-      <Panel title="Station" open={open.station} onToggle={() => tog('station')} summary={stationSummary}>
-        <StationSection state={state} dispatch={dispatch} />
-      </Panel>
-
       {/* ── Crew ── */}
       <Panel title="Crew" open={open.crew} onToggle={() => tog('crew')} locked={lockedSections.crew} summary={crewSummary}>
         <CrewSection state={state} dispatch={dispatch} />
+      </Panel>
+
+      {/* ── Station (construction) ── */}
+      <Panel title="Station" open={open.station} onToggle={() => tog('station')} summary={stationSummary}>
+        <StationSection state={state} dispatch={dispatch} />
       </Panel>
 
       {/* ── Surface Ops ── */}

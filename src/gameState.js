@@ -69,9 +69,9 @@ export const INITIAL_STATE = {
   // ── Log ───────────────────────────────────────────────────
   log: [
     { id: 7, text: 'this is a recovery mission now. station first. answers second.', tick: 0 },
-    { id: 6, text: 'surface scans confirm: the ruins are still there. they\'re not going anywhere.', tick: 0 },
-    { id: 5, text: 'the previous team\'s last log entry: 22 days ago.', tick: 0 },
-    { id: 4, text: 'life support at minimum. beginning emergency restoration.', tick: 0 },
+    { id: 6, text: 'previous team\'s last recorded entry: 22 days ago. no further contact.', tick: 0 },
+    { id: 5, text: 'life support at minimum. beginning emergency restoration.', tick: 0 },
+    { id: 4, text: 'crew boarding. three personnel. commencing station assessment.', tick: 0 },
     { id: 3, text: 'docking. the station is intact. the crew bay is empty.', tick: 0 },
     { id: 2, text: 'hailing outpost zero on all channels. no response.', tick: 0 },
     { id: 1, text: 'orbital insertion complete. eridu-7 below.', tick: 0 },

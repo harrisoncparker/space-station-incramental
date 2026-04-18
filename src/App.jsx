@@ -1,7 +1,7 @@
 // ============================================================
 // OUTPOST ZERO — React UI
 // ============================================================
-import { useReducer, useEffect, useCallback, useMemo } from 'react';
+import { useReducer, useEffect, useCallback, useMemo, useState } from 'react';
 import { gameReducer, computeRates } from './gameReducer';
 import { INITIAL_STATE } from './gameState';
 import {
@@ -149,11 +149,41 @@ function Panel({ title, badge, open, onToggle, locked, summary, children }) {
   );
 }
 
+// ── FADE IN ─────────────────────────────────────────────────────
+// Mounts children only when show becomes true, then fades them in.
+// Once rendered, never unmounts — intro-only reveal component.
+
+function FadeIn({ show, children }) {
+  const [rendered, setRendered] = useState(show);
+  const [visible,  setVisible]  = useState(show);
+  useEffect(() => {
+    if (show && !rendered) {
+      setRendered(true);
+      const t = setTimeout(() => setVisible(true), 30);
+      return () => clearTimeout(t);
+    }
+  }, [show, rendered]);
+  if (!rendered) return null;
+  return (
+    <div style={{
+      opacity: visible ? 1 : 0,
+      transition: 'opacity 1.2s ease',
+      transitionDelay: visible ? '0.9s' : '0s',
+      pointerEvents: visible ? 'auto' : 'none',
+    }}>
+      {children}
+    </div>
+  );
+}
+
 // ── COMMAND FEED ───────────────────────────────────────────────
 // Single always-visible column: live missions → dock events (inline actions) → recent log
 
-function CommandFeed({ state, dispatch }) {
+function CommandFeed({ state, dispatch, introPhase = 8 }) {
   const { missions, dockEvents, unlocked, log } = state;
+  const introComplete = introPhase >= 8;
+  // During intro: show only entries whose id ≤ current phase (one per phase, in order)
+  const displayLog = introComplete ? log.slice(0, 4) : log.filter(e => e.id <= introPhase);
 
   return (
     <div style={{ padding: '8px 14px 10px', background: BG, borderBottom: `1px solid ${BD}` }}>
@@ -216,7 +246,7 @@ function CommandFeed({ state, dispatch }) {
       })}
 
       {/* Recent log entries — flow below live items, lower urgency */}
-      {log.slice(0, 4).map((entry, i) => {
+      {displayLog.map((entry, i) => {
         const opacity = Math.max(0.18, 1 - i * 0.22);
         return (
           <div key={entry.id} style={{
@@ -330,13 +360,15 @@ const OPS_ROWS = [
   { label: 'Credits', res: 'credits', cap: 'creditsCap', role: 'comms',       isSurvival: false },
 ];
 
-function OperationsSection({ state, rates, dispatch }) {
+function OperationsSection({ state, rates, dispatch, introPhase = 8, introCrew = 3 }) {
   const { o2Rate, foodRate, partsRate, creditsRate } = rates;
   const rateMap = { lifeSupport: o2Rate, hydroponics: foodRate, technician: partsRate, comms: creditsRate };
-  const avail       = availCrew(state);
-  const onMis       = crewOnMission(state.missions);
-  const total       = state.crew.length;
-  const injured     = state.crew.filter(c => c.status === 'injured');
+  const avail        = availCrew(state);
+  const onMis        = crewOnMission(state.missions);
+  const total        = state.crew.length;
+  const injured      = state.crew.filter(c => c.status === 'injured');
+  const introComplete = introPhase >= 8;
+  const displayCrew  = introComplete ? total : introCrew;
 
   return (
     <div>
@@ -344,7 +376,7 @@ function OperationsSection({ state, rates, dispatch }) {
 
       {/* Crew summary */}
       <div style={{ fontSize: 12, color: DIM, marginBottom: injured.length ? 6 : 14, lineHeight: 1.8 }}>
-        {total} aboard · {onMis} on mission · {avail} unassigned · max {state.maxCrew}
+        {displayCrew} aboard · {onMis} on mission · {avail} unassigned · max {state.maxCrew}
       </div>
       {injured.length > 0 && (
         <div style={{ fontSize: 11, color: A, marginBottom: 14 }}>
@@ -352,75 +384,76 @@ function OperationsSection({ state, rates, dispatch }) {
         </div>
       )}
 
-      {/* Column header */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 5 }}>
-        <span style={{ fontSize: 9, color: DIM, letterSpacing: 2, textTransform: 'uppercase', width: 98, textAlign: 'center' }}>
-          Workers
-        </span>
-      </div>
+      {/* Resource rows + worker controls — revealed at phase 5 (life support) */}
+      <FadeIn show={introComplete || introPhase >= 5}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 5 }}>
+          <span style={{ fontSize: 9, color: DIM, letterSpacing: 2, textTransform: 'uppercase', width: 98, textAlign: 'center' }}>
+            Assign Crew
+          </span>
+        </div>
 
-      {/* Resource + worker rows */}
-      {OPS_ROWS.map(row => {
-        const value  = state[row.res];
-        const cap    = state[row.cap];
-        const rate   = rateMap[row.role];
-        const pct    = cap > 0 ? Math.min(1, value / cap) : 0;
-        const col    = row.isSurvival ? resColor(pct) : INV;
-        const crit   = row.isSurvival && pct < 0.05;
-        const rc     = rate > 0.005 ? G : rate < -0.005 ? (row.isSurvival ? R : DIM) : DIM;
-        const count  = state.roles[row.role];
-        const canInc = avail > 0;
-        const canDec = count > 0;
-        return (
-          <div key={row.role} style={{
-            display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8,
-            animation: crit ? 'pulse 0.8s ease-in-out infinite' : 'none',
-          }}>
-            <span style={{ width: 56, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: col, flexShrink: 0 }}>
-              {row.label}
-            </span>
-            <div style={{ flex: 1, height: 4, background: '#161616', position: 'relative', overflow: 'hidden', borderRadius: 1 }}>
-              <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${pct * 100}%`, background: col, transition: 'width 0.5s ease' }} />
-            </div>
-            <span style={{ width: 58, textAlign: 'right', fontSize: 11, color: col, flexShrink: 0 }}>
-              {fmt(value)}/{cap}
-            </span>
-            <span style={{ width: 52, textAlign: 'right', fontSize: 11, color: rc, flexShrink: 0 }}>
-              {fmtRate(rate)}
-            </span>
-            <Btn onClick={() => dispatch({ type: 'ASSIGN_ROLE', role: row.role, delta: -1 })} disabled={!canDec} style={{ padding: '6px 11px', fontSize: 13, minHeight: 34, minWidth: 34 }}>−</Btn>
-            <span style={{ width: 14, textAlign: 'center', fontSize: 14, color: count > 0 ? G : DIM }}>{count}</span>
-            <Btn onClick={() => dispatch({ type: 'ASSIGN_ROLE', role: row.role, delta:  1 })} disabled={!canInc} style={{ padding: '6px 11px', fontSize: 13, minHeight: 34, minWidth: 34 }}>+</Btn>
-          </div>
-        );
-      })}
-
-      {/* Artifacts — no crew role, recovered via missions */}
-      {state.unlocked.research && (() => {
-        const pct = state.artifactsCap > 0 ? Math.min(1, state.artifacts / state.artifactsCap) : 0;
-        return (
-          <>
-            <div style={{ borderTop: `1px solid ${BD}`, margin: '8px 0 10px' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 56, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: INV, flexShrink: 0 }}>
-                Artif.
+        {OPS_ROWS.map(row => {
+          const value  = state[row.res];
+          const cap    = state[row.cap];
+          const rate   = rateMap[row.role];
+          const pct    = cap > 0 ? Math.min(1, value / cap) : 0;
+          const col    = row.isSurvival ? resColor(pct) : INV;
+          const crit   = row.isSurvival && pct < 0.05;
+          const rc     = rate > 0.005 ? G : rate < -0.005 ? (row.isSurvival ? R : DIM) : DIM;
+          const count  = state.roles[row.role];
+          const canInc = avail > 0;
+          const canDec = count > 0;
+          return (
+            <div key={row.role} style={{
+              display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8,
+              animation: crit ? 'pulse 0.8s ease-in-out infinite' : 'none',
+            }}>
+              <span style={{ width: 56, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: col, flexShrink: 0 }}>
+                {row.label}
               </span>
               <div style={{ flex: 1, height: 4, background: '#161616', position: 'relative', overflow: 'hidden', borderRadius: 1 }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${pct * 100}%`, background: INV, transition: 'width 0.5s ease' }} />
+                <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${pct * 100}%`, background: col, transition: 'width 0.5s ease' }} />
               </div>
-              <span style={{ width: 58, textAlign: 'right', fontSize: 11, color: INV, flexShrink: 0 }}>
-                {fmt(state.artifacts)}/{state.artifactsCap}
+              <span style={{ width: 58, textAlign: 'right', fontSize: 11, color: col, flexShrink: 0, paddingRight: 8 }}>
+                {fmt(value)}/{cap}
               </span>
-              <span style={{ width: 52, textAlign: 'right', fontSize: 11, color: DIM, flexShrink: 0 }}>
-                +0.00/s
+              <span style={{ width: 52, textAlign: 'right', fontSize: 11, color: rc, flexShrink: 0, paddingRight: 16 }}>
+                {fmtRate(rate)}
               </span>
-              <span style={{ width: 98, textAlign: 'center', fontSize: 10, color: DIM, flexShrink: 0, letterSpacing: 0.5 }}>
-                via missions
-              </span>
+              <Btn onClick={() => dispatch({ type: 'ASSIGN_ROLE', role: row.role, delta: -1 })} disabled={!canDec} style={{ padding: '6px 11px', fontSize: 13, minHeight: 34, minWidth: 34 }}>−</Btn>
+              <span style={{ width: 14, textAlign: 'center', fontSize: 14, color: count > 0 ? G : DIM }}>{count}</span>
+              <Btn onClick={() => dispatch({ type: 'ASSIGN_ROLE', role: row.role, delta:  1 })} disabled={!canInc} style={{ padding: '6px 11px', fontSize: 13, minHeight: 34, minWidth: 34 }}>+</Btn>
             </div>
-          </>
-        );
-      })()}
+          );
+        })}
+
+        {/* Artifacts — no crew role, recovered via missions */}
+        {state.unlocked.research && (() => {
+          const pct = state.artifactsCap > 0 ? Math.min(1, state.artifacts / state.artifactsCap) : 0;
+          return (
+            <>
+              <div style={{ borderTop: `1px solid ${BD}`, margin: '8px 0 10px' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 56, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: INV, flexShrink: 0 }}>
+                  Artif.
+                </span>
+                <div style={{ flex: 1, height: 4, background: '#161616', position: 'relative', overflow: 'hidden', borderRadius: 1 }}>
+                  <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${pct * 100}%`, background: INV, transition: 'width 0.5s ease' }} />
+                </div>
+                <span style={{ width: 58, textAlign: 'right', fontSize: 11, color: INV, flexShrink: 0 }}>
+                  {fmt(state.artifacts)}/{state.artifactsCap}
+                </span>
+                <span style={{ width: 52, textAlign: 'right', fontSize: 11, color: DIM, flexShrink: 0 }}>
+                  +0.00/s
+                </span>
+                <span style={{ width: 98, textAlign: 'center', fontSize: 10, color: DIM, flexShrink: 0, letterSpacing: 0.5 }}>
+                  via missions
+                </span>
+              </div>
+            </>
+          );
+        })()}
+      </FadeIn>
 
       {/* Win state */}
       {state.gameWon && (
@@ -435,7 +468,8 @@ function OperationsSection({ state, rates, dispatch }) {
         </div>
       )}
 
-      {/* Roster */}
+      {/* Roster — revealed at phase 4 (crew boarding) */}
+      <FadeIn show={introComplete || introPhase >= 4}>
       {state.crew.length > 0 && (
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BD}` }}>
           <div style={{ fontSize: 11, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 7 }}>Roster</div>
@@ -454,6 +488,7 @@ function OperationsSection({ state, rates, dispatch }) {
           </div>
         </div>
       )}
+      </FadeIn>
     </div>
   );
 }
@@ -883,10 +918,33 @@ export default function App() {
   const rates = useMemo(() => computeRates(state), [state]);
   const tog   = useCallback(sec => dispatch({ type: 'TOGGLE_SECTION', section: sec }), []);
 
+  const [introPhase, setIntroPhase] = useState(0);
+  const [introCrew,  setIntroCrew]  = useState(0);
+  const introComplete = introPhase >= 8;
+
+  // Intro phase progression
   useEffect(() => {
+    if (introComplete) return;
+    const delays = [800, 2800, 2800, 2800, 2800, 2800, 2800, 2800, 1500];
+    const id = setTimeout(() => setIntroPhase(p => p + 1), delays[introPhase] ?? 2800);
+    return () => clearTimeout(id);
+  }, [introPhase, introComplete]);
+
+  // Crew boarding animation at phase 4
+  useEffect(() => {
+    if (introPhase !== 4) return;
+    const t1 = setTimeout(() => setIntroCrew(1), 400);
+    const t2 = setTimeout(() => setIntroCrew(2), 800);
+    const t3 = setTimeout(() => setIntroCrew(3), 1200);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [introPhase]);
+
+  // Game tick — only starts after intro completes
+  useEffect(() => {
+    if (!introComplete) return;
     const id = setInterval(() => dispatch({ type: 'TICK' }), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [introComplete]);
 
   const { open, unlocked, lockedSections } = state;
 
@@ -931,76 +989,102 @@ export default function App() {
       maxWidth: 480, margin: '0 auto', padding: '0 0 56px',
       minHeight: '100vh', background: BG, fontFamily: MN, color: TX,
     }}>
-      {/* ── Header ── */}
-      <div style={{ padding: '14px 14px 0', borderBottom: `1px solid ${BD}` }}>
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-          paddingBottom: 10,
-        }}>
-          <div style={{ fontSize: 18, letterSpacing: 4, color: G, textTransform: 'uppercase' }}>
-            Outpost Zero
-          </div>
-          <div style={{ fontSize: 10, color: DIM, letterSpacing: 1 }}>
-            eridu-7 · t+{state.tick}s
-          </div>
+
+      {/* ── Phase 0: blinking cursor ── */}
+      {introPhase === 0 && (
+        <div style={{ padding: '18px 14px', fontSize: 16, color: G, animation: 'blink 0.8s step-end infinite' }}>
+          _
         </div>
-        {/* Contact timer — compact row with inline fill bar */}
-        {unlocked.dock && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10 }}>
-            <span style={{ fontSize: 10, color: DIM, flexShrink: 0, minWidth: 86 }}>
-              contact: {state.nextDockEventIn}s
-            </span>
-            <div style={{ flex: 1, height: 2, background: '#181818', borderRadius: 1, overflow: 'hidden' }}>
-              <div style={{
-                width: `${Math.max(0, Math.min(100, (1 - state.nextDockEventIn / 65) * 100))}%`,
-                height: '100%', background: '#3a3a3a', borderRadius: 1,
-                transition: 'width 1s linear',
-              }} />
+      )}
+
+      {/* ── Header — phase 1 ── */}
+      <FadeIn show={introPhase >= 1}>
+        <div style={{ padding: '14px 14px 0', borderBottom: `1px solid ${BD}` }}>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            paddingBottom: 10,
+          }}>
+            <div style={{ fontSize: 18, letterSpacing: 4, color: G, textTransform: 'uppercase' }}>
+              Outpost Zero
+            </div>
+            <div style={{ fontSize: 10, color: DIM, letterSpacing: 1 }}>
+              eridu-7 · t+{state.tick}s
             </div>
           </div>
+          {unlocked.dock && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10 }}>
+              <span style={{ fontSize: 10, color: DIM, flexShrink: 0, minWidth: 86 }}>
+                contact: {state.nextDockEventIn}s
+              </span>
+              <div style={{ flex: 1, height: 2, background: '#181818', borderRadius: 1, overflow: 'hidden' }}>
+                <div style={{
+                  width: `${Math.max(0, Math.min(100, (1 - state.nextDockEventIn / 65) * 100))}%`,
+                  height: '100%', background: '#3a3a3a', borderRadius: 1,
+                  transition: 'width 1s linear',
+                }} />
+              </div>
+            </div>
+          )}
+        </div>
+      </FadeIn>
+
+      {/* ── Command feed — phase 1 ── */}
+      <FadeIn show={introPhase >= 1}>
+        <CommandFeed state={state} dispatch={dispatch} introPhase={introPhase} />
+      </FadeIn>
+
+      {/* ── Operations — phase 3 ── */}
+      <FadeIn show={introPhase >= 3}>
+        <Panel title="Operations" open={open.status} onToggle={() => tog('status')} summary={operationsSummary}>
+          <OperationsSection state={state} rates={rates} dispatch={dispatch} introPhase={introPhase} introCrew={introCrew} />
+        </Panel>
+      </FadeIn>
+
+      {/* ── Objectives — phase 7 ── */}
+      <FadeIn show={introPhase >= 7}>
+        <ObjectivesStrip state={state} />
+      </FadeIn>
+
+      {/* ── Station — phase 6 ── */}
+      <FadeIn show={introPhase >= 6}>
+        <Panel title="Station" open={open.station} onToggle={() => tog('station')} summary={stationSummary}>
+          <StationSection state={state} dispatch={dispatch} />
+        </Panel>
+      </FadeIn>
+
+      {/* ── Late panels (Surface Ops, Dock, Research) — phase 7 ── */}
+      <FadeIn show={introPhase >= 7}>
+        {unlocked.surfaceOps && (
+          <Panel title="Surface Ops" open={open.surfaceOps} onToggle={() => tog('surfaceOps')} locked={lockedSections.surfaceOps} summary={surfSummary}>
+            <SurfaceOpsSection state={state} dispatch={dispatch} />
+          </Panel>
         )}
-      </div>
+        {unlocked.dock && (
+          <Panel title="Dock" open={open.dock} onToggle={() => tog('dock')} locked={lockedSections.dock} summary={dockSummary}>
+            <DockSection state={state} dispatch={dispatch} />
+          </Panel>
+        )}
+        {unlocked.research && (
+          <Panel title="Research" open={open.research} onToggle={() => tog('research')} summary={researchSummary}>
+            <ResearchSection state={state} dispatch={dispatch} />
+          </Panel>
+        )}
+      </FadeIn>
 
-      {/* ── Objectives (always visible) ── */}
-      <ObjectivesStrip state={state} />
-
-      {/* ── Command feed: missions + dock events + recent log ── */}
-      <CommandFeed state={state} dispatch={dispatch} />
-
-      {/* ── Operations ── */}
-      <Panel title="Operations" open={open.status} onToggle={() => tog('status')} summary={operationsSummary}>
-        <OperationsSection state={state} rates={rates} dispatch={dispatch} />
-      </Panel>
-
-      {/* ── Station (construction) ── */}
-      <Panel title="Station" open={open.station} onToggle={() => tog('station')} summary={stationSummary}>
-        <StationSection state={state} dispatch={dispatch} />
-      </Panel>
-
-      {/* ── Surface Ops ── */}
-      {unlocked.surfaceOps && (
-        <Panel title="Surface Ops" open={open.surfaceOps} onToggle={() => tog('surfaceOps')} locked={lockedSections.surfaceOps} summary={surfSummary}>
-          <SurfaceOpsSection state={state} dispatch={dispatch} />
-        </Panel>
-      )}
-
-      {/* ── Dock ── */}
-      {unlocked.dock && (
-        <Panel
-          title="Dock"
-          open={open.dock} onToggle={() => tog('dock')}
-          locked={lockedSections.dock}
-          summary={dockSummary}
+      {/* ── Skip intro button ── */}
+      {!introComplete && (
+        <button
+          onClick={() => { setIntroPhase(8); setIntroCrew(3); }}
+          style={{
+            position: 'fixed', bottom: 20, right: 20,
+            background: 'none', border: 'none',
+            color: DIM, fontFamily: MN, fontSize: 11,
+            cursor: 'pointer', letterSpacing: 1, opacity: 0.6,
+            padding: '8px 0',
+          }}
         >
-          <DockSection state={state} dispatch={dispatch} />
-        </Panel>
-      )}
-
-      {/* ── Research ── */}
-      {unlocked.research && (
-        <Panel title="Research" open={open.research} onToggle={() => tog('research')} summary={researchSummary}>
-          <ResearchSection state={state} dispatch={dispatch} />
-        </Panel>
+          skip intro
+        </button>
       )}
 
     </div>

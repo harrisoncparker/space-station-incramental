@@ -14,7 +14,7 @@ import {
 const G   = '#4cff72';   // green  — healthy / positive
 const A   = '#ffb347';   // amber  — warning
 const R   = '#ff4444';   // red    — critical
-const DIM = '#aaa';
+const DIM = '#c0c0c0';
 const TX  = '#f0f0f0';
 const BG  = '#0a0a0a';
 const BG2 = '#0e0e0e';

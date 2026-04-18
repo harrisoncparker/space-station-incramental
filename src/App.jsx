@@ -1031,6 +1031,11 @@ export default function App() {
         </div>
       </FadeIn>
 
+      {/* ── Objectives — phase 7 ── */}
+      <FadeIn show={introPhase >= 7}>
+        <ObjectivesStrip state={state} />
+      </FadeIn>
+
       {/* ── Command feed — phase 1 ── */}
       <FadeIn show={introPhase >= 1}>
         <CommandFeed state={state} dispatch={dispatch} introPhase={introPhase} />
@@ -1041,11 +1046,6 @@ export default function App() {
         <Panel title="Operations" open={open.status} onToggle={() => tog('status')} summary={operationsSummary}>
           <OperationsSection state={state} rates={rates} dispatch={dispatch} introPhase={introPhase} introCrew={introCrew} />
         </Panel>
-      </FadeIn>
-
-      {/* ── Objectives — phase 7 ── */}
-      <FadeIn show={introPhase >= 7}>
-        <ObjectivesStrip state={state} />
       </FadeIn>
 
       {/* ── Station — phase 6 ── */}

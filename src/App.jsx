@@ -14,13 +14,13 @@ import {
 const G   = '#4cff72';   // green  — healthy / positive
 const A   = '#ffb347';   // amber  — warning
 const R   = '#ff4444';   // red    — critical
-const DIM = '#888';
-const TX  = '#e0e0e0';
+const DIM = '#aaa';
+const TX  = '#f0f0f0';
 const BG  = '#0a0a0a';
 const BG2 = '#0e0e0e';
-const BD  = '#1e1e1e';
+const BD  = '#2a2a2a';
 const MN  = "'Courier New', Courier, monospace";
-const INV = '#4499cc';   // blue   — inventory resource (no danger)
+const INV = '#55aaee';   // blue   — inventory resource (no danger)
 
 // ── Tiny helpers ───────────────────────────────────────────────
 

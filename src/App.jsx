@@ -171,7 +171,7 @@ function FadeIn({ show, children }) {
   return (
     <div style={{
       opacity: visible ? 1 : 0,
-      transition: 'opacity 1.4s ease',
+      transition: 'opacity 2.8s ease',
       pointerEvents: visible ? 'auto' : 'none',
     }}>
       {children}
@@ -928,7 +928,7 @@ export default function App() {
   // Intro phase progression
   useEffect(() => {
     if (introComplete) return;
-    const delays = [800, 2800, 2800, 2800, 2800, 2800, 2800, 2800, 1500];
+    const delays = [1600, 5600, 5600, 5600, 5600, 5600, 5600, 5600, 3000];
     const id = setTimeout(() => setIntroPhase(p => p + 1), delays[introPhase] ?? 2800);
     return () => clearTimeout(id);
   }, [introPhase, introComplete]);
@@ -936,9 +936,9 @@ export default function App() {
   // Crew boarding animation at phase 4
   useEffect(() => {
     if (introPhase !== 4) return;
-    const t1 = setTimeout(() => setIntroCrew(1), 400);
-    const t2 = setTimeout(() => setIntroCrew(2), 800);
-    const t3 = setTimeout(() => setIntroCrew(3), 1200);
+    const t1 = setTimeout(() => setIntroCrew(1), 800);
+    const t2 = setTimeout(() => setIntroCrew(2), 1600);
+    const t3 = setTimeout(() => setIntroCrew(3), 2400);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [introPhase]);
 

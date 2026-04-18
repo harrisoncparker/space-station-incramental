@@ -1,7 +1,7 @@
 // ============================================================
 // OUTPOST ZERO — React UI
 // ============================================================
-import { useReducer, useEffect, useCallback, useMemo, useState } from 'react';
+import { useReducer, useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { gameReducer, computeRates } from './gameReducer';
 import { INITIAL_STATE } from './gameState';
 import {
@@ -151,24 +151,27 @@ function Panel({ title, badge, open, onToggle, locked, summary, children }) {
 
 // ── FADE IN ─────────────────────────────────────────────────────
 // Mounts children only when show becomes true, then fades them in.
-// Once rendered, never unmounts — intro-only reveal component.
+// Uses a ref for the "ever shown" flag to avoid cancelling the
+// opacity transition via effect cleanup.
 
 function FadeIn({ show, children }) {
-  const [rendered, setRendered] = useState(show);
-  const [visible,  setVisible]  = useState(show);
+  const [visible, setVisible] = useState(false);
+  const everShown = useRef(show);
+  if (show) everShown.current = true;
+
   useEffect(() => {
-    if (show && !rendered) {
-      setRendered(true);
-      const t = setTimeout(() => setVisible(true), 30);
-      return () => clearTimeout(t);
-    }
-  }, [show, rendered]);
-  if (!rendered) return null;
+    if (!show) return;
+    // Small delay lets the browser register opacity:0 before transitioning to 1
+    const t = setTimeout(() => setVisible(true), 60);
+    return () => clearTimeout(t);
+  }, [show]); // only [show] — does NOT re-run when visible changes, so the timeout isn't cancelled
+
+  if (!everShown.current) return null;
+
   return (
     <div style={{
       opacity: visible ? 1 : 0,
-      transition: 'opacity 1.2s ease',
-      transitionDelay: visible ? '0.9s' : '0s',
+      transition: 'opacity 1.4s ease',
       pointerEvents: visible ? 'auto' : 'none',
     }}>
       {children}

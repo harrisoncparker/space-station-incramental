@@ -156,7 +156,7 @@ function CommandFeed({ state, dispatch }) {
   const { missions, dockEvents, unlocked, log } = state;
 
   return (
-    <div style={{ padding: '8px 14px 10px', background: '#090b09', borderBottom: `1px solid ${BD}` }}>
+    <div style={{ padding: '8px 14px 10px', background: BG, borderBottom: `1px solid ${BD}` }}>
       {/* Active missions */}
       {missions.map((m, i) => {
         const def = m.type === 'anomaly' ? ANOMALY_MISSION
@@ -304,7 +304,7 @@ function ObjectivesStrip({ state }) {
   return (
     <div style={{
       padding: '8px 14px',
-      background: '#0a0c0a',
+      background: BG,
       borderBottom: `1px solid ${BD}`,
     }}>
       <div style={{ fontSize: 10, color: DIM, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 5 }}>

@@ -319,24 +319,110 @@ function ObjectivesStrip({ state }) {
   );
 }
 
-// ── STATUS ──────────────────────────────────────────────────────
+// ── OPERATIONS (resources + crew combined) ──────────────────────
 
 const DESC = { fontSize: 11, color: DIM, marginBottom: 12, lineHeight: 1.5 };
 
-function StatusSection({ state, rates }) {
+const OPS_ROWS = [
+  { label: 'O₂',      res: 'o2',      cap: 'o2Cap',      role: 'lifeSupport', isSurvival: true  },
+  { label: 'Food',    res: 'food',    cap: 'foodCap',    role: 'hydroponics', isSurvival: true  },
+  { label: 'Parts',   res: 'parts',   cap: 'partsCap',   role: 'technician',  isSurvival: false },
+  { label: 'Credits', res: 'credits', cap: 'creditsCap', role: 'comms',       isSurvival: false },
+];
+
+function OperationsSection({ state, rates, dispatch }) {
   const { o2Rate, foodRate, partsRate, creditsRate } = rates;
+  const rateMap = { lifeSupport: o2Rate, hydroponics: foodRate, technician: partsRate, comms: creditsRate };
+  const avail       = availCrew(state);
+  const onMis       = crewOnMission(state.missions);
+  const total       = state.crew.length;
+  const injured     = state.crew.filter(c => c.status === 'injured');
+
   return (
     <div>
-      <div style={DESC}>Current resource levels and production rates across all station systems.</div>
-      {/* Survival resources — warn when critically low */}
-      <ResourceBar label="O₂"      value={state.o2}      cap={state.o2Cap}      rate={o2Rate}      isSurvival />
-      <ResourceBar label="Food"    value={state.food}    cap={state.foodCap}    rate={foodRate}    isSurvival />
-      {/* Inventory resources — blue, no warning */}
-      <ResourceBar label="Parts"   value={state.parts}   cap={state.partsCap}   rate={partsRate}   isSurvival={false} />
-      <ResourceBar label="Credits" value={state.credits} cap={state.creditsCap} rate={creditsRate} isSurvival={false} />
-      {state.unlocked.research && (
-        <ResourceBar label="Artifact" value={state.artifacts} cap={state.artifactsCap} rate={0} isSurvival={false} />
+      <div style={DESC}>Assign workers to each station system to maintain resource production.</div>
+
+      {/* Crew summary */}
+      <div style={{ fontSize: 12, color: DIM, marginBottom: injured.length ? 6 : 14, lineHeight: 1.8 }}>
+        {total} aboard · {onMis} on mission · {avail} unassigned · max {state.maxCrew}
+      </div>
+      {injured.length > 0 && (
+        <div style={{ fontSize: 11, color: A, marginBottom: 14 }}>
+          {injured.map(c => `${c.name} recovering — ${c.injuredTimer}s`).join(' · ')}
+        </div>
       )}
+
+      {/* Column header */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 5 }}>
+        <span style={{ fontSize: 9, color: DIM, letterSpacing: 2, textTransform: 'uppercase', width: 98, textAlign: 'center' }}>
+          Workers
+        </span>
+      </div>
+
+      {/* Resource + worker rows */}
+      {OPS_ROWS.map(row => {
+        const value  = state[row.res];
+        const cap    = state[row.cap];
+        const rate   = rateMap[row.role];
+        const pct    = cap > 0 ? Math.min(1, value / cap) : 0;
+        const col    = row.isSurvival ? resColor(pct) : INV;
+        const crit   = row.isSurvival && pct < 0.05;
+        const rc     = rate > 0.005 ? G : rate < -0.005 ? (row.isSurvival ? R : DIM) : DIM;
+        const count  = state.roles[row.role];
+        const canInc = avail > 0;
+        const canDec = count > 0;
+        return (
+          <div key={row.role} style={{
+            display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8,
+            animation: crit ? 'pulse 0.8s ease-in-out infinite' : 'none',
+          }}>
+            <span style={{ width: 56, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: col, flexShrink: 0 }}>
+              {row.label}
+            </span>
+            <div style={{ flex: 1, height: 4, background: '#161616', position: 'relative', overflow: 'hidden', borderRadius: 1 }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${pct * 100}%`, background: col, transition: 'width 0.5s ease' }} />
+            </div>
+            <span style={{ width: 58, textAlign: 'right', fontSize: 11, color: col, flexShrink: 0 }}>
+              {fmt(value)}/{cap}
+            </span>
+            <span style={{ width: 52, textAlign: 'right', fontSize: 11, color: rc, flexShrink: 0 }}>
+              {fmtRate(rate)}
+            </span>
+            <Btn onClick={() => dispatch({ type: 'ASSIGN_ROLE', role: row.role, delta: -1 })} disabled={!canDec} style={{ padding: '6px 11px', fontSize: 13, minHeight: 34, minWidth: 34 }}>−</Btn>
+            <span style={{ width: 14, textAlign: 'center', fontSize: 14, color: count > 0 ? G : DIM }}>{count}</span>
+            <Btn onClick={() => dispatch({ type: 'ASSIGN_ROLE', role: row.role, delta:  1 })} disabled={!canInc} style={{ padding: '6px 11px', fontSize: 13, minHeight: 34, minWidth: 34 }}>+</Btn>
+          </div>
+        );
+      })}
+
+      {/* Artifacts — no crew role, recovered via missions */}
+      {state.unlocked.research && (() => {
+        const pct = state.artifactsCap > 0 ? Math.min(1, state.artifacts / state.artifactsCap) : 0;
+        return (
+          <>
+            <div style={{ borderTop: `1px solid ${BD}`, margin: '8px 0 10px' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 56, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: INV, flexShrink: 0 }}>
+                Artif.
+              </span>
+              <div style={{ flex: 1, height: 4, background: '#161616', position: 'relative', overflow: 'hidden', borderRadius: 1 }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${pct * 100}%`, background: INV, transition: 'width 0.5s ease' }} />
+              </div>
+              <span style={{ width: 58, textAlign: 'right', fontSize: 11, color: INV, flexShrink: 0 }}>
+                {fmt(state.artifacts)}/{state.artifactsCap}
+              </span>
+              <span style={{ width: 52, textAlign: 'right', fontSize: 11, color: DIM, flexShrink: 0 }}>
+                +0.00/s
+              </span>
+              <span style={{ width: 98, textAlign: 'center', fontSize: 10, color: DIM, flexShrink: 0, letterSpacing: 0.5 }}>
+                via missions
+              </span>
+            </div>
+          </>
+        );
+      })()}
+
+      {/* Win state */}
       {state.gameWon && (
         <div style={{
           marginTop: 14, padding: '12px', border: `1px solid ${G}`,
@@ -346,6 +432,26 @@ function StatusSection({ state, rates }) {
           ◈ WARP BEACON ACTIVE ◈<br />
           rescue fleet inbound. outpost zero survives.<br />
           — mission complete —
+        </div>
+      )}
+
+      {/* Roster */}
+      {state.crew.length > 0 && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BD}` }}>
+          <div style={{ fontSize: 11, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 7 }}>Roster</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+            {state.crew.map(c => (
+              <span key={c.id} style={{
+                fontSize: 12, padding: '4px 8px',
+                border: `1px solid ${c.status === 'injured' ? A : '#2a2a2a'}`,
+                color: c.status === 'injured' ? A : DIM,
+              }}>
+                {c.name}
+                {c.status === 'injured' ? ` [−${c.injuredTimer}s]` : ''}
+                {c.specialist ? ' ★' : ''}
+              </span>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -431,70 +537,6 @@ function StationSection({ state, dispatch }) {
           crew arrive automatically when berths are available.
         </div>
       </div>
-    </div>
-  );
-}
-
-// ── CREW ────────────────────────────────────────────────────────
-
-function CrewSection({ state, dispatch }) {
-  const onMis  = crewOnMission(state.missions);
-  const inj    = state.crew.filter(c => c.status === 'injured').length;
-  const avail  = availCrew(state);
-  const total  = state.crew.length;
-
-  return (
-    <div>
-      <div style={DESC}>Assign crew to station roles to keep O₂ and food production running.</div>
-      {/* Summary */}
-      <div style={{ fontSize: 12, color: DIM, marginBottom: 14, letterSpacing: 0.5, lineHeight: 1.8 }}>
-        {total} aboard · {onMis} on mission · {avail} unassigned
-        {inj > 0 && <span style={{ color: A }}> · {inj} injured</span>}
-        <span style={{ color: DIM }}> · max {state.maxCrew}</span>
-      </div>
-
-      {/* Role assignments */}
-      {ROLES.map(role => {
-        const count  = state.roles[role.id];
-        const canInc = avail > 0;
-        const canDec = count > 0;
-        return (
-          <div key={role.id} style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            borderBottom: `1px solid #141414`, padding: '5px 0', minHeight: 46,
-          }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, color: TX }}>{role.name}</div>
-              <div style={{ fontSize: 11, color: DIM, marginTop: 1 }}>{role.prodDesc}</div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-              <Btn onClick={() => dispatch({ type: 'ASSIGN_ROLE', role: role.id, delta: -1 })} disabled={!canDec} style={{ padding: '9px 15px' }}>−</Btn>
-              <span style={{ width: 22, textAlign: 'center', fontSize: 15, color: count > 0 ? G : DIM }}>{count}</span>
-              <Btn onClick={() => dispatch({ type: 'ASSIGN_ROLE', role: role.id, delta:  1 })} disabled={!canInc} style={{ padding: '9px 15px' }}>+</Btn>
-            </div>
-          </div>
-        );
-      })}
-
-      {/* Roster */}
-      {state.crew.length > 0 && (
-        <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 11, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 7 }}>Roster</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-            {state.crew.map(c => (
-              <span key={c.id} style={{
-                fontSize: 12, padding: '4px 8px',
-                border: `1px solid ${c.status === 'injured' ? A : '#222'}`,
-                color: c.status === 'injured' ? A : DIM,
-              }}>
-                {c.name}
-                {c.status === 'injured' ? ` [−${c.injuredTimer}s]` : ''}
-                {c.specialist ? ' ★' : ''}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -851,28 +893,20 @@ export default function App() {
   // ── Panel summaries (shown when collapsed) ──
   const o2Col  = state.o2 / state.o2Cap < 0.2 ? A : G;
   const fCol   = state.food / state.foodCap < 0.2 ? A : G;
-  const statusSummary = (
+  const avail  = availCrew(state);
+  const operationsSummary = (
     <span>
       <span style={{ color: o2Col }}>O₂ {fmt(state.o2)}</span>
       <span style={{ color: DIM }}> · </span>
       <span style={{ color: fCol }}>Food {fmt(state.food)}</span>
       <span style={{ color: DIM }}> · </span>
-      <span style={{ color: INV }}>Parts {fmt(state.parts)}</span>
+      <span style={{ color: avail > 0 ? G : A }}>{avail} free</span>
     </span>
   );
 
   const builtCount = state.constructedBuildings.length;
   const totalBuildings = Object.keys(BUILDINGS).length;
   const stationSummary = `${builtCount}/${totalBuildings} built · ${state.quartersBuilt} quarters`;
-
-  const avail = availCrew(state);
-  const crewSummary = (
-    <span>
-      <span style={{ color: G }}>{state.crew.length}</span>
-      <span style={{ color: DIM }}> aboard · </span>
-      <span style={{ color: avail > 0 ? G : A }}>{avail} free</span>
-    </span>
-  );
 
   const surfSummary = state.missions.length > 0
     ? <span><span style={{ color: A }}>{state.missions.length} in flight</span></span>
@@ -933,14 +967,9 @@ export default function App() {
       {/* ── Command feed: missions + dock events + recent log ── */}
       <CommandFeed state={state} dispatch={dispatch} />
 
-      {/* ── Status ── */}
-      <Panel title="Status" open={open.status} onToggle={() => tog('status')} summary={statusSummary}>
-        <StatusSection state={state} rates={rates} />
-      </Panel>
-
-      {/* ── Crew ── */}
-      <Panel title="Crew" open={open.crew} onToggle={() => tog('crew')} locked={lockedSections.crew} summary={crewSummary}>
-        <CrewSection state={state} dispatch={dispatch} />
+      {/* ── Operations ── */}
+      <Panel title="Operations" open={open.status} onToggle={() => tog('status')} summary={operationsSummary}>
+        <OperationsSection state={state} rates={rates} dispatch={dispatch} />
       </Panel>
 
       {/* ── Station (construction) ── */}

@@ -21,7 +21,7 @@ export const INITIAL_STATE = {
   ],
   maxCrew: 3,
   quartersBuilt: 0,
-  roles: { lifeSupport: 1, hydroponics: 1, technician: 0, comms: 0 },
+  roles: { lifeSupport: 0, hydroponics: 0, technician: 0, comms: 0 },
   crewIdCounter: 4,
 
   // ── Station (buildings) ───────────────────────────────────
@@ -52,6 +52,7 @@ export const INITIAL_STATE = {
   totalPartsCollected: 0,
   totalMissionsCompleted: 0,
   reputation: 0,
+  stabilised: false,
 
   // ── Section unlock/open state ─────────────────────────────
   unlocked: {
@@ -78,7 +79,7 @@ export const INITIAL_STATE = {
     { id: 4, text: 'crew boarding. three personnel. commencing station assessment.', tick: 0 },
     { id: 3, text: 'docking. the station is intact. the crew bay is empty.', tick: 0 },
     { id: 2, text: 'hailing the orbital outpost zero on all channels. no response.', tick: 0 },
-    { id: 1, text: 'orbital insertion complete. the planet eridu-7 looms below.', tick: 0 },
+    { id: 1, text: 'orbital insertion complete. the planet looms below. they call it eridu-7', tick: 0 },
   ],
   logIdCounter: 8,
 

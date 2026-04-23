@@ -431,7 +431,12 @@ export function gameReducer(state, action) {
       const avail = availableCrew(state);
       if (delta > 0 && avail <= 0) return state;
       if (delta > 0 && newCount > state.crew.length - crewOnMission(state.missions)) return state;
-      return { ...state, roles: { ...state.roles, [role]: newCount } };
+      let s = { ...state, roles: { ...state.roles, [role]: newCount } };
+      if (!state.stabilised && s.roles.lifeSupport >= 1 && s.roles.hydroponics >= 1) {
+        s = { ...s, stabilised: true };
+        s = addLog(s, 'life support and hydroponics online. the station will hold. the sublevel 3 beacon is still transmitting — someone is out there.');
+      }
+      return s;
     }
 
     // ── BUILD QUARTERS ───────────────────────────────────────

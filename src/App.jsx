@@ -280,6 +280,12 @@ function getObjectives(state) {
   const signals = state.discoveredSignals || [];
   const hasSignal = signals.length > 0;
 
+  // ── Step 0: stabilise life support before anything else ─────
+  if (!state.stabilised) {
+    objectives.push({ text: 'stabilise oxygen and food production', key: 'stabilise' });
+    return objectives;
+  }
+
   // ── Crew-first early game ────────────────────────────────────
   if (!built.includes('shuttleBay')) {
     if (hasSignal) {

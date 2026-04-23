@@ -8,6 +8,7 @@ import {
   ROLES, MISSIONS, ANOMALY_MISSION, RESEARCH_TREE,
   BUILDINGS, QUARTERS_BASE_COST, QUARTERS_SCALE, SITE_POOL,
 } from './gameConstants';
+import { saveGame, loadGame, clearGame, exportSave, parseSave } from './storage';
 
 // ── Palette ────────────────────────────────────────────────────
 
@@ -915,15 +916,154 @@ function ResearchSection({ state, dispatch }) {
 
 // ── LOG ────────────────────────────────────────────────────────
 
+// ── SETTINGS MODAL ─────────────────────────────────────────────
+
+function SettingsModal({ state, onClose }) {
+  const hasSave = loadGame() !== null;
+  const [resetStage,  setResetStage]  = useState(0); // 0: idle · 1: confirm
+  const [importError, setImportError] = useState('');
+  const [exportNote,  setExportNote]  = useState('');
+  const fileRef = useRef(null);
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function handleExport() {
+    if (state) saveGame(state); // flush latest state before export
+    const ok = exportSave();
+    setExportNote(ok ? 'saved to downloads ✓' : 'nothing to export');
+    setTimeout(() => setExportNote(''), 2500);
+  }
+
+  function handleImport(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const parsed = parseSave(ev.target.result);
+      if (!parsed) { setImportError('invalid or incompatible save file'); return; }
+      saveGame(parsed);
+      window.location.reload();
+    };
+    reader.readAsText(file);
+  }
+
+  function handleReset() {
+    if (resetStage === 0) { setResetStage(1); return; }
+    clearGame();
+    window.location.reload();
+  }
+
+  const saveInfo = hasSave && state
+    ? `t+${state.tick}s · ${state.crew.length} crew · ${state.constructedBuildings.length} buildings`
+    : 'no save data';
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 50,
+        background: 'rgba(0,0,0,0.88)',
+        display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
+        paddingTop: 60,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 480,
+          background: BG, border: `1px solid ${BD}`,
+          padding: '16px 16px 22px',
+          fontFamily: MN,
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <span style={{ fontSize: 10, letterSpacing: 2.5, color: DIM, textTransform: 'uppercase' }}>
+            settings
+          </span>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', color: DIM, fontFamily: MN, fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 2px' }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Save info */}
+        <div style={{ fontSize: 9, color: DIM, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>
+          save data
+        </div>
+        <div style={{ fontSize: 11, color: DIM, marginBottom: 14, lineHeight: 1.5 }}>
+          {saveInfo}
+        </div>
+
+        {/* Save actions */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 22 }}>
+          <Btn onClick={handleExport} style={{ textAlign: 'center', fontSize: 12 }}>
+            Export Save
+          </Btn>
+          {exportNote && (
+            <div style={{ fontSize: 11, color: G, textAlign: 'center' }}>{exportNote}</div>
+          )}
+          <Btn onClick={() => fileRef.current?.click()} style={{ textAlign: 'center', fontSize: 12 }}>
+            Import Save
+          </Btn>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={handleImport}
+            style={{ display: 'none' }}
+          />
+          {importError && (
+            <div style={{ fontSize: 11, color: R }}>{importError}</div>
+          )}
+        </div>
+
+        {/* Danger zone */}
+        <div style={{ borderTop: `1px solid ${BD}`, paddingTop: 14 }}>
+          <div style={{ fontSize: 9, color: R, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 }}>
+            danger zone
+          </div>
+          <Btn
+            variant={resetStage === 1 ? 'danger' : 'default'}
+            onClick={handleReset}
+            style={{ width: '100%', textAlign: 'center', fontSize: 12 }}
+          >
+            {resetStage === 1 ? 'confirm — cannot be undone' : 'Reset Progress'}
+          </Btn>
+          {resetStage === 1 && (
+            <button
+              onClick={() => setResetStage(0)}
+              style={{
+                display: 'block', width: '100%', textAlign: 'center',
+                background: 'none', border: 'none', color: DIM,
+                fontFamily: MN, fontSize: 11, cursor: 'pointer',
+                marginTop: 8, padding: '6px 0',
+              }}
+            >
+              cancel
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── ROOT APP ───────────────────────────────────────────────────
 
 export default function App() {
-  const [state, dispatch] = useReducer(gameReducer, INITIAL_STATE);
+  const [state, dispatch] = useReducer(gameReducer, undefined, () => loadGame() ?? INITIAL_STATE);
   const rates = useMemo(() => computeRates(state), [state]);
   const tog   = useCallback(sec => dispatch({ type: 'TOGGLE_SECTION', section: sec }), []);
 
-  const [introPhase, setIntroPhase] = useState(0);
-  const [introCrew,  setIntroCrew]  = useState(0);
+  const [introPhase, setIntroPhase] = useState(() => loadGame() !== null ? 8 : 0);
+  const [introCrew,  setIntroCrew]  = useState(() => loadGame() !== null ? 3 : 0);
   const introComplete = introPhase >= 8;
 
   const INTRO_LABELS = [
@@ -937,6 +1077,26 @@ export default function App() {
     '[ BEGIN OPERATIONS ]',
   ];
   const advanceIntro = useCallback(() => setIntroPhase(p => Math.min(p + 1, 8)), []);
+
+  // Keep a ref to the latest state so auto-save closures never go stale
+  const stateRef = useRef(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  // Auto-save: every 60s while the game is running
+  useEffect(() => {
+    if (!introComplete) return;
+    const id = setInterval(() => saveGame(stateRef.current), 60_000);
+    return () => clearInterval(id);
+  }, [introComplete]);
+
+  // Auto-save: flush on tab/window close
+  useEffect(() => {
+    const flush = () => saveGame(stateRef.current);
+    window.addEventListener('beforeunload', flush);
+    return () => window.removeEventListener('beforeunload', flush);
+  }, []);
+
+  const [showSettings, setShowSettings] = useState(false);
 
   // Crew boarding animation at phase 4
   useEffect(() => {
@@ -1018,8 +1178,14 @@ export default function App() {
               <div style={{ fontSize: 18, letterSpacing: 4, color: G, textTransform: 'uppercase', animation: 'fadeUp 0.7s ease both' }}>
                 Outpost Zero
               </div>
-              <div style={{ fontSize: 10, color: DIM, letterSpacing: 1, animation: 'fadeUp 0.7s ease 0.45s both' }}>
-                eridu-7 · t+{state.tick}s
+              <div style={{ fontSize: 10, color: DIM, letterSpacing: 1, animation: 'fadeUp 0.7s ease 0.45s both', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span>eridu-7 · t+{state.tick}s</span>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  style={{ background: 'none', border: 'none', color: DIM, fontFamily: MN, fontSize: 13, cursor: 'pointer', padding: 0, opacity: 0.6, lineHeight: 1 }}
+                >
+                  ⚙
+                </button>
               </div>
             </div>
             {unlocked.dock && (
@@ -1083,6 +1249,8 @@ export default function App() {
           </Panel>
         )}
       </FadeIn>
+
+      {showSettings && <SettingsModal state={state} onClose={() => setShowSettings(false)} />}
 
       {/* ── Intro navigation: Continue + Skip ── */}
       {!introComplete && (

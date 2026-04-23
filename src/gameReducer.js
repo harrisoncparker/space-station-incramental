@@ -3,7 +3,8 @@
 // ============================================================
 import {
   CREW_NAME_POOL, MISSIONS, ANOMALY_MISSION, RESEARCH_TREE,
-  BUILDINGS, SITE_POOL, QUARTERS_BASE_COST, QUARTERS_SCALE, RESOURCE_LABELS,
+  BUILDINGS, SITE_POOL, SURVIVOR_SIGNAL_POOL,
+  QUARTERS_BASE_COST, QUARTERS_SCALE, RESOURCE_LABELS,
 } from './gameConstants';
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -222,6 +223,48 @@ export function gameReducer(state, action) {
       s = { ...s, missions: active };
 
       for (const m of done) {
+        // Signal missions: narrative outcomes only, never mechanical failure
+        if (m.type === 'signal') {
+          const survivalChance = Math.min(0.85, 0.40 + m.crewCount * 0.15);
+          const survived = Math.random() < survivalChance;
+          if (survived) {
+            if (s.crew.length < s.maxCrew) {
+              const name = pickName(s.crew.map(c => c.name));
+              s = {
+                ...s,
+                crew: [...s.crew, { id: s.crewIdCounter, name, status: 'available', injuredTimer: 0 }],
+                crewIdCounter: s.crewIdCounter + 1,
+                survivorRescueCount: (s.survivorRescueCount || 0) + 1,
+                totalMissionsCompleted: s.totalMissionsCompleted + 1,
+              };
+              s = addLog(s, `search team returns. survivor located — ${(m.signalName || 'signal source').toLowerCase()}. ${name} is aboard.`);
+            } else {
+              s = {
+                ...s,
+                survivorRescueCount: (s.survivorRescueCount || 0) + 1,
+                totalMissionsCompleted: s.totalMissionsCompleted + 1,
+              };
+              s = addLog(s, `search team returns. survivor located — no available quarters.`);
+            }
+          } else {
+            const failRoll = Math.random();
+            if (failRoll < 0.40) {
+              const amount = 3 + Math.floor(Math.random() * 4);
+              s = { ...s, artifacts: clamp(s.artifacts + amount, 0, s.artifactsCap) };
+              s = addLog(s, `search team returns. no survivor — only remains. recovered research equipment from the site. +${amount} artifacts.`);
+            } else if (failRoll < 0.70) {
+              const amount = 20 + Math.floor(Math.random() * 16);
+              s = { ...s, food: clamp(s.food + amount, 0, s.foodCap) };
+              s = addLog(s, `search team returns. false signal — previous crew stored emergency rations here. +${amount} food.`);
+            } else {
+              const amount = 15 + Math.floor(Math.random() * 11);
+              s = { ...s, parts: clamp(s.parts + amount, 0, s.partsCap) };
+              s = addLog(s, `search team returns. the signal was a disabled surface crawler — still transmitting. salvaged components. +${amount} parts.`);
+            }
+          }
+          continue;
+        }
+
         const def = m.type === 'anomaly' ? ANOMALY_MISSION
                   : m.type === 'site'    ? SITE_POOL.find(p => p.id === m.siteId)
                   :                        MISSIONS[m.type];
@@ -424,19 +467,26 @@ export function gameReducer(state, action) {
       if (availableCrew(state) < n) return state;
       const type = state.selectedMission;
 
-      // Resolve the mission definition
-      let def, isSite = false, siteId = null;
+      let def, isSite = false, siteId = null, isSignal = false, signalId = null, signalName = null;
       if (type === 'anomaly') {
         if (!state.completedResearch.includes('deepOrbitScanner')) return state;
         def = ANOMALY_MISSION;
       } else if (type.startsWith('site_')) {
-        const sid = type.slice(5); // strip 'site_' prefix
+        const sid = type.slice(5);
         const site = state.discoveredSites.find(s => s.id === sid);
         if (!site) return state;
         def = SITE_POOL.find(p => p.id === sid);
         if (!def) return state;
         isSite = true;
         siteId = sid;
+      } else if (type.startsWith('signal_')) {
+        const sid = type.slice(7);
+        const signal = (state.discoveredSignals || []).find(s => s.id === sid);
+        if (!signal) return state;
+        def = signal;
+        isSignal = true;
+        signalId = sid;
+        signalName = signal.name;
       } else {
         def = MISSIONS[type];
       }
@@ -447,8 +497,10 @@ export function gameReducer(state, action) {
 
       const mission = {
         id: state.missionIdCounter,
-        type: isSite ? 'site' : type,
+        type: isSignal ? 'signal' : isSite ? 'site' : type,
         siteId,
+        signalId,
+        signalName,
         crewCount: n,
         timer: duration, totalTime: duration,
       };
@@ -457,34 +509,57 @@ export function gameReducer(state, action) {
         ...state,
         missions: [...state.missions, mission],
         missionIdCounter: state.missionIdCounter + 1,
-        // Remove the site from discovered list and reset selection
         discoveredSites: isSite
           ? state.discoveredSites.filter(s => s.id !== siteId)
           : state.discoveredSites,
-        selectedMission: isSite ? 'mining' : state.selectedMission,
+        discoveredSignals: isSignal
+          ? (state.discoveredSignals || []).filter(s => s.id !== signalId)
+          : (state.discoveredSignals || []),
+        usedSignalIds: isSignal
+          ? [...(state.usedSignalIds || []), signalId]
+          : (state.usedSignalIds || []),
+        selectedMission: (isSite || isSignal) ? 'mining' : state.selectedMission,
       };
-      return addLog(s, `shuttle launched: ${def.name.toLowerCase()}. ${n} crew aboard.`);
+      const launchMsg = isSignal
+        ? `search team launched: ${def.name.toLowerCase()}. ${n} crew aboard.`
+        : `shuttle launched: ${def.name.toLowerCase()}. ${n} crew aboard.`;
+      return addLog(s, launchMsg);
     }
 
     // ── SCAN ────────────────────────────────────────────────
     case 'SCAN': {
       if (!state.constructedBuildings.includes('surfaceScanner')) return state;
       if (state.scanCooldown > 0) return state;
-      if (state.discoveredSites.length >= 3) return state;
       if (state.parts < 5) return state;
 
-      const usedIds = state.discoveredSites.map(s => s.id);
-      const available = SITE_POOL.filter(s => !usedIds.includes(s.id));
-      if (!available.length) return state;
+      const sitesFull   = state.discoveredSites.length >= 3;
+      const signalsFull = (state.discoveredSignals || []).length >= 3;
+      if (sitesFull && signalsFull) return addLog(state, 'scanner queue full (max 3 sites, 3 signals).');
 
-      const site = available[Math.floor(Math.random() * available.length)];
-      let s = {
-        ...state,
-        parts: state.parts - 5,
-        scanCooldown: 90,
-        discoveredSites: [...state.discoveredSites, site],
-      };
-      return addLog(s, `scan complete. site identified: ${site.name.toLowerCase()}.`);
+      const usedSiteIds  = state.discoveredSites.map(s => s.id);
+      const usedSigIds   = state.usedSignalIds || [];
+      const discSigIds   = (state.discoveredSignals || []).map(s => s.id);
+      const availSites   = sitesFull ? [] : SITE_POOL.filter(s => !usedSiteIds.includes(s.id));
+      const availSignals = signalsFull ? [] : SURVIVOR_SIGNAL_POOL.filter(
+        s => !usedSigIds.includes(s.id) && !discSigIds.includes(s.id)
+      );
+
+      const combined = [
+        ...availSites.map(s => ({ kind: 'site', data: s })),
+        ...availSignals.map(s => ({ kind: 'signal', data: s })),
+      ];
+      if (!combined.length) return addLog(state, 'scan complete. nothing new detected.');
+
+      const pick = combined[Math.floor(Math.random() * combined.length)];
+      let s = { ...state, parts: state.parts - 5, scanCooldown: 90 };
+
+      if (pick.kind === 'signal') {
+        s = { ...s, discoveredSignals: [...(s.discoveredSignals || []), pick.data] };
+        return addLog(s, `scan complete. distress signal detected: ${pick.data.name.toLowerCase()}.`);
+      } else {
+        s = { ...s, discoveredSites: [...s.discoveredSites, pick.data] };
+        return addLog(s, `scan complete. site identified: ${pick.data.name.toLowerCase()}.`);
+      }
     }
 
     // ── DOCK EVENT ACCEPT ───────────────────────────────────
@@ -514,21 +589,6 @@ export function gameReducer(state, action) {
         outgoingDeliveries: [...state.outgoingDeliveries, delivery],
       };
       return addLog(s, `supply drop ordered. ${action.res} inbound in 60s.`);
-    }
-
-    // ── HIRE SPECIALIST ──────────────────────────────────────
-    case 'HIRE_SPECIALIST': {
-      const cost = 80;
-      if (state.credits < cost) return state;
-      if (state.crew.length >= state.maxCrew) return state;
-      const name = pickName(state.crew.map(c => c.name));
-      let s = {
-        ...state,
-        credits: state.credits - cost,
-        crew: [...state.crew, { id: state.crewIdCounter, name, status: 'available', injuredTimer: 0, specialist: true }],
-        crewIdCounter: state.crewIdCounter + 1,
-      };
-      return addLog(s, `specialist ${name} hired and en route.`);
     }
 
     // ── RESEARCH ────────────────────────────────────────────

@@ -1,6 +1,7 @@
 // ============================================================
 // OUTPOST ZERO — Initial State
 // ============================================================
+import { STARTING_SIGNAL } from './gameConstants';
 
 export const INITIAL_STATE = {
   tick: 0,
@@ -32,8 +33,11 @@ export const INITIAL_STATE = {
   missionCrewCount: 1,
   selectedMission: 'mining',
   missionIdCounter: 1,
-  discoveredSites: [],   // sites found by surface scanner, each a one-time mission
-  scanCooldown: 0,       // seconds until next scan available
+  discoveredSites: [],
+  discoveredSignals: [STARTING_SIGNAL],
+  usedSignalIds: ['sig_start'],
+  survivorRescueCount: 0,
+  scanCooldown: 0,
 
   // ── Dock ─────────────────────────────────────────────────
   dockEvents: [],

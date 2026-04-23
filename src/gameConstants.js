@@ -180,12 +180,95 @@ export const MISSIONS = {
     duration: 90, baseSuccess: 0.75, risk: 'MED',
     getRewards: (n) => ({ credits: 15 + n * 5, artifacts: 3 + n }),
   },
-  rescue: {
-    id: 'rescue', name: 'Rescue Op',
-    desc: 'Recover crew from distress beacon',
-    duration: 75, baseSuccess: 0.70, risk: 'HIGH',
-    getRewards: () => ({ newCrew: 1 }),
+};
+
+// ── Survivor signal pool ──────────────────────────────────────
+// Discovered by scanning (mixed with precursor sites).
+// Each is a one-time search-and-rescue mission with narrative outcomes.
+
+export const SURVIVOR_SIGNAL_POOL = [
+  {
+    id: 'sig_01', name: 'Research Wing Transponder',
+    desc: 'Repeating signal from the eastern research corridor. Manual origin — someone set this deliberately.',
+    duration: 65,
   },
+  {
+    id: 'sig_02', name: 'East Ridge Survey Marker',
+    desc: 'A survey beacon repurposed as a distress signal. Standard-issue station equipment.',
+    duration: 80,
+  },
+  {
+    id: 'sig_03', name: 'Camp Foxtrot Beacon',
+    desc: 'Field camp designator transmitting on emergency band. The camp is not on any official manifest.',
+    duration: 90,
+  },
+  {
+    id: 'sig_04', name: 'Northern Excavation Post',
+    desc: 'Signal origin is 4km north, near the dig perimeter. Intermittent — battery failing.',
+    duration: 85,
+  },
+  {
+    id: 'sig_05', name: 'Atmospheric Array Station 2',
+    desc: 'One of the surface weather monitoring posts. Something is using its transmitter.',
+    duration: 70,
+  },
+  {
+    id: 'sig_06', name: 'Perimeter Post Seven',
+    desc: 'Outer boundary marker, manually activated. Posts like this require a keycard to trigger.',
+    duration: 75,
+  },
+  {
+    id: 'sig_07', name: 'Emergency Shelter Bravo',
+    desc: 'Pre-positioned emergency shelter, beacon active. Shelters are stocked for 30 days.',
+    duration: 80,
+  },
+  {
+    id: 'sig_08', name: 'Deep Dig Station Four',
+    desc: 'Signal is coming from 60 metres below the surface. The dig shaft shows signs of recent use.',
+    duration: 95,
+  },
+  {
+    id: 'sig_09', name: 'Transit Corridor Seven',
+    desc: "A maintenance tunnel connecting the station's outer modules. Signal is weak but steady.",
+    duration: 70,
+  },
+  {
+    id: 'sig_10', name: 'Surface Lab Omega',
+    desc: 'Auxiliary research post, supposed to be decommissioned two years ago. Apparently not.',
+    duration: 85,
+  },
+  {
+    id: 'sig_11', name: 'Relay Station Kilo',
+    desc: 'Communications relay on the southern plateau. Its antenna array is still active.',
+    duration: 90,
+  },
+  {
+    id: 'sig_12', name: 'Western Approach Beacon',
+    desc: 'Landing approach marker, repurposed. The signal pattern matches a personal distress code.',
+    duration: 75,
+  },
+  {
+    id: 'sig_13', name: 'Archive Sublevel B',
+    desc: "The station's lower archive level. No one was assigned here — and yet.",
+    duration: 80,
+  },
+  {
+    id: 'sig_14', name: 'Southern Ridge Repeater',
+    desc: 'Signal booster station on the ridge line, 6km out. Something is sheltering near the equipment.',
+    duration: 95,
+  },
+  {
+    id: 'sig_15', name: 'Crawler Bay Delta',
+    desc: 'The vehicle depot signal. Someone drove a crawler out there and stopped transmitting.',
+    duration: 85,
+  },
+];
+
+export const STARTING_SIGNAL = {
+  id: 'sig_start',
+  name: 'Sublevel 3 Beacon',
+  desc: 'A weak repeating signal from beneath the lower access corridor. Human-band frequency. Close.',
+  duration: 60,
 };
 
 export const ANOMALY_MISSION = {

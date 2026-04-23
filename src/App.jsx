@@ -194,6 +194,7 @@ function CommandFeed({ state, dispatch, introPhase = 8 }) {
       {missions.map((m, i) => {
         const def = m.type === 'anomaly' ? ANOMALY_MISSION
                   : m.type === 'site'    ? SITE_POOL.find(p => p.id === m.siteId)
+                  : m.type === 'signal'  ? { name: m.signalName || 'search op' }
                   :                        MISSIONS[m.type];
         if (!def) return null;
         const returning = m.timer <= 10;
@@ -248,22 +249,23 @@ function CommandFeed({ state, dispatch, introPhase = 8 }) {
         );
       })}
 
-      {/* Recent log entries — scrollable, lower urgency */}
-      <div style={{ maxHeight: 100, overflowY: 'auto' }}>
-        {displayLog.map((entry, i) => {
-          const opacity = Math.max(0.18, 1 - i * 0.22);
-          return (
-            <div key={entry.id} style={{
-              fontSize: 12, lineHeight: 1.75,
-              color: i === 0 && (missions.length === 0 && dockEvents.length === 0)
-                ? TX
-                : `rgba(200,200,200,${opacity})`,
-              animation: i === 0 ? 'slideIn 0.3s ease' : 'none',
-            }}>
-              &gt; {entry.text}
-            </div>
-          );
-        })}
+      {/* Recent log entries — scrollable, gradient fade via mask so scrolled entries become visible */}
+      <div style={{
+        maxHeight: 100, overflowY: 'auto',
+        WebkitMaskImage: 'linear-gradient(to bottom, black 35%, transparent 100%)',
+        maskImage: 'linear-gradient(to bottom, black 35%, transparent 100%)',
+      }}>
+        {displayLog.map((entry, i) => (
+          <div key={entry.id} style={{
+            fontSize: 12, lineHeight: 1.75,
+            color: i === 0 && missions.length === 0 && dockEvents.length === 0
+              ? TX
+              : 'rgba(200,200,200,0.7)',
+            animation: i === 0 ? 'slideIn 0.3s ease' : 'none',
+          }}>
+            &gt; {entry.text}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -273,22 +275,39 @@ function CommandFeed({ state, dispatch, introPhase = 8 }) {
 
 function getObjectives(state) {
   const objectives = [];
-  const done = state.completedResearch;
-  const built = state.constructedBuildings;
+  const done    = state.completedResearch;
+  const built   = state.constructedBuildings;
+  const signals = state.discoveredSignals || [];
+  const hasSignal = signals.length > 0;
 
-  // Early game: building the station
+  // ── Crew-first early game ────────────────────────────────────
   if (!built.includes('shuttleBay')) {
-    if (state.parts >= 30) {
+    if (hasSignal) {
+      objectives.push({ text: 'distress signal detected — build a shuttle bay to reach the surface', key: 'signal-shuttle' });
+    } else if (state.parts >= 30) {
       objectives.push({ text: 'shuttle bay ready to construct', key: 'build-shuttle' });
     } else {
       objectives.push({ text: 'gather parts to construct a shuttle bay', key: 'parts' });
     }
-  } else if (!built.includes('commsArray')) {
+    return objectives;
+  }
+
+  if (hasSignal) {
+    objectives.push({ text: `launch a search — ${signals[0].name.toLowerCase()} is active`, key: 'search' });
+  } else if ((state.survivorRescueCount || 0) < 3) {
+    if (built.includes('surfaceScanner') && state.scanCooldown === 0) {
+      objectives.push({ text: 'scan the surface to locate distress signals', key: 'scan-for-signals' });
+    } else if (!built.includes('surfaceScanner')) {
+      objectives.push({ text: 'build a surface scanner to locate survivors', key: 'build-scanner' });
+    }
+  }
+
+  // ── Mid-game: station building ───────────────────────────────
+  if (!built.includes('commsArray')) {
     objectives.push({ text: 'construct a comms array to contact passing ships', key: 'build-comms' });
   } else if (!built.includes('researchLab')) {
     objectives.push({ text: 'build a research lab to study recovered artifacts', key: 'build-research' });
   } else {
-    // Research progression goals
     const tier1Done = done.includes('efficientRecycling') && done.includes('drillUpgrades');
     const tier2Done = done.includes('advancedHydroponics') && done.includes('secondShuttle');
     const tier3Done = done.includes('expeditionPlanning') && done.includes('crewExpansion');
@@ -306,20 +325,19 @@ function getObjectives(state) {
     }
   }
 
-  // Secondary: always show a station-building goal if one is available
+  // Secondary: next available building
   const nextBuilding = Object.values(BUILDINGS).find(b =>
     !built.includes(b.id) && b.requires.every(r => built.includes(r))
   );
   if (nextBuilding && objectives[0]?.key !== `build-${nextBuilding.id}`) {
-    // Don't duplicate if primary already covers it
     const already = objectives.some(o => o.key.startsWith('build-'));
     if (!already) {
       objectives.push({ text: `${nextBuilding.name.toLowerCase()} available for construction`, key: `build-${nextBuilding.id}` });
     }
   }
 
-  // Scanner hint
-  if (built.includes('surfaceScanner') && state.discoveredSites.length === 0 && state.scanCooldown === 0) {
+  // Scanner hint (sites only, don't duplicate signal hint)
+  if (built.includes('surfaceScanner') && state.discoveredSites.length === 0 && state.scanCooldown === 0 && !hasSignal) {
     objectives.push({ text: 'run a surface scan to locate precursor sites', key: 'scan' });
   }
 
@@ -598,20 +616,28 @@ function SurfaceOpsSection({ state, dispatch }) {
   const maxShuttles    = state.completedResearch.includes('secondShuttle') ? 2 : 1;
   const allBusy        = state.missions.length >= maxShuttles;
   const canLaunch      = !allBusy && avail >= state.missionCrewCount;
+  const sitesFull      = state.discoveredSites.length >= 3;
+  const signalsFull    = (state.discoveredSignals || []).length >= 3;
   const canScan        = hasSurfScanner && state.scanCooldown === 0
-                         && state.discoveredSites.length < 3 && state.parts >= 5;
+                         && (!sitesFull || !signalsFull) && state.parts >= 5;
 
   const allMissions = { ...MISSIONS, ...(hasScanner ? { anomaly: ANOMALY_MISSION } : {}) };
 
+  const isSignalMission = (state.selectedMission || '').startsWith('signal_');
   let selDef;
   if (state.selectedMission && state.selectedMission.startsWith('site_')) {
     const sid = state.selectedMission.slice(5);
     selDef = SITE_POOL.find(p => p.id === sid) || MISSIONS.mining;
+  } else if (isSignalMission) {
+    const sid = state.selectedMission.slice(7);
+    selDef = (state.discoveredSignals || []).find(s => s.id === sid) || MISSIONS.mining;
   } else {
     selDef = allMissions[state.selectedMission] || MISSIONS.mining;
   }
 
-  const successPct = Math.min(95, Math.round((selDef.baseSuccess + (state.missionCrewCount - 1) * 0.05) * 100));
+  const successPct = isSignalMission
+    ? Math.min(85, Math.round((0.40 + state.missionCrewCount * 0.15) * 100))
+    : Math.min(95, Math.round(((selDef.baseSuccess || 0.8) + (state.missionCrewCount - 1) * 0.05) * 100));
   const durMult    = hasExpPlan ? 0.7 : 1.0;
 
   return (
@@ -637,9 +663,9 @@ function SurfaceOpsSection({ state, dispatch }) {
                 <div style={{ fontSize: 10, color: DIM, marginTop: 2 }}>
                   {state.scanCooldown > 0
                     ? `cooldown: ${state.scanCooldown}s`
-                    : state.discoveredSites.length >= 3
-                    ? 'site queue full (max 3)'
-                    : '5 parts · identifies a precursor site'}
+                    : (sitesFull && signalsFull)
+                    ? 'queue full (max 3 sites, 3 signals)'
+                    : '5 parts · locates precursor sites and distress signals'}
                 </div>
               </div>
               <Btn
@@ -661,6 +687,53 @@ function SurfaceOpsSection({ state, dispatch }) {
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 11, color: DIM, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Mission type</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+
+            {/* Distress Signals — highest priority, shown first */}
+            {(state.discoveredSignals || []).length > 0 && (
+              <>
+                <div style={{
+                  fontSize: 9, color: G, letterSpacing: 1.5, textTransform: 'uppercase',
+                  marginBottom: 2, paddingBottom: 8, borderBottom: `1px solid ${BD}`,
+                }}>
+                  Distress Signals
+                </div>
+                {(state.discoveredSignals || []).map(signal => {
+                  const mKey = `signal_${signal.id}`;
+                  const sel  = state.selectedMission === mKey;
+                  const displayDur = Math.ceil(signal.duration * durMult);
+                  const survivalPct = Math.min(85, Math.round((0.40 + state.missionCrewCount * 0.15) * 100));
+                  return (
+                    <button
+                      key={mKey}
+                      onClick={() => dispatch({ type: 'SET_MISSION', missionType: mKey })}
+                      style={{
+                        background: sel ? '#001a00' : 'none',
+                        border: `1px solid ${sel ? G : '#1a3a1a'}`,
+                        color: sel ? G : '#4a7a4a',
+                        fontFamily: MN, fontSize: 12,
+                        padding: '9px 10px', cursor: 'pointer',
+                        textAlign: 'left', minHeight: 44,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>{signal.name}</span>
+                        <span style={{ fontSize: 11, color: sel ? '#4a7a4a' : DIM }}>{displayDur}s</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: sel ? '#4a8a4a' : '#3a5a3a', marginTop: 2, lineHeight: 1.4 }}>
+                        {signal.desc}
+                      </div>
+                      {sel && (
+                        <div style={{ fontSize: 11, color: G, marginTop: 4 }}>
+                          survival chance ({state.missionCrewCount} crew): {survivalPct}% · failure yields resources
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+                <div style={{ height: 6 }} />
+              </>
+            )}
+
             {Object.values(allMissions).map(m => {
               const sel = state.selectedMission === m.id;
               const rw = m.getRewards ? m.getRewards(state.missionCrewCount) : null;
@@ -759,7 +832,7 @@ function SurfaceOpsSection({ state, dispatch }) {
             style={{ padding: '9px 15px' }}
           >+</Btn>
           <span style={{ fontSize: 11, color: DIM }}>
-            success:{' '}
+            {isSignalMission ? 'survival:' : 'success:'}{' '}
             <span style={{ color: successPct >= 85 ? G : successPct >= 70 ? A : R }}>
               {successPct}%
             </span>
@@ -788,11 +861,10 @@ const SUPPLY_RES = ['o2', 'food', 'parts'];
 
 function DockSection({ state, dispatch }) {
   const canSupply = state.credits >= 30;
-  const canSpec   = state.credits >= 80 && state.crew.length < state.maxCrew;
 
   return (
     <div>
-      <div style={DESC}>Request supply drops and hire specialists from ships passing through the system.</div>
+      <div style={DESC}>Request supply drops and arrange inbound deliveries from passing ships.</div>
       {/* In-transit deliveries */}
       {state.outgoingDeliveries.length > 0 && (
         <div style={{ marginBottom: 12 }}>
@@ -821,17 +893,6 @@ function DockSection({ state, dispatch }) {
           ))}
         </div>
       </div>
-
-      <Btn
-        variant={canSpec ? 'primary' : 'default'}
-        onClick={() => dispatch({ type: 'HIRE_SPECIALIST' })}
-        disabled={!canSpec}
-        style={{ width: '100%', fontSize: 12 }}
-      >
-        {state.crew.length >= state.maxCrew
-          ? 'crew capacity full'
-          : 'Hire Specialist — 80 credits'}
-      </Btn>
 
     </div>
   );
@@ -908,7 +969,7 @@ function ResearchSection({ state, dispatch }) {
 
 // ── SETTINGS MODAL ─────────────────────────────────────────────
 
-function SettingsModal({ state, onClose }) {
+function SettingsModal({ state, onClose, onReset }) {
   const hasSave = loadGame() !== null;
   const [resetStage,  setResetStage]  = useState(0); // 0: idle · 1: confirm
   const [importError, setImportError] = useState('');
@@ -943,8 +1004,7 @@ function SettingsModal({ state, onClose }) {
 
   function handleReset() {
     if (resetStage === 0) { setResetStage(1); return; }
-    clearGame();
-    window.location.reload();
+    onReset();
   }
 
   const saveInfo = hasSave && state
@@ -1142,6 +1202,9 @@ export default function App() {
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
 
+  // Set this to true before a reset-triggered reload to suppress the beforeunload save
+  const resettingRef = useRef(false);
+
   // Auto-save: every 60s while the game is running
   useEffect(() => {
     if (!introComplete) return;
@@ -1149,9 +1212,9 @@ export default function App() {
     return () => clearInterval(id);
   }, [introComplete]);
 
-  // Auto-save: flush on tab/window close
+  // Auto-save: flush on tab/window close (skipped if a reset is in progress)
   useEffect(() => {
-    const flush = () => saveGame(stateRef.current);
+    const flush = () => { if (!resettingRef.current) saveGame(stateRef.current); };
     window.addEventListener('beforeunload', flush);
     return () => window.removeEventListener('beforeunload', flush);
   }, []);
@@ -1201,8 +1264,8 @@ export default function App() {
 
   const dockEvtCount = state.dockEvents.length;
   const dockSummary = dockEvtCount > 0
-    ? <span style={{ color: A }}>{dockEvtCount} incoming · supply &amp; hires available</span>
-    : <span style={{ color: DIM }}>supply drops · crew hires</span>;
+    ? <span style={{ color: A }}>{dockEvtCount} incoming · supply available</span>
+    : <span style={{ color: DIM }}>supply drops · beacon responses</span>;
 
   const researchDone = state.completedResearch.length;
   const researchSummary = (
@@ -1312,7 +1375,7 @@ export default function App() {
       </FadeIn>
 
       {showWelcomeBack && <WelcomeBackModal state={state} onClose={() => setShowWelcomeBack(false)} />}
-      {showSettings    && <SettingsModal    state={state} onClose={() => setShowSettings(false)} />}
+      {showSettings    && <SettingsModal    state={state} onClose={() => setShowSettings(false)} onReset={() => { resettingRef.current = true; clearGame(); window.location.reload(); }} />}
 
       {/* ── Intro navigation: Continue + Skip ── */}
       {!introComplete && (

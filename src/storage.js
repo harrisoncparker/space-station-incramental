@@ -11,7 +11,7 @@
 // ============================================================
 
 const KEY = 'outpost_zero_save';
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 
 export function saveGame(state) {
   try {

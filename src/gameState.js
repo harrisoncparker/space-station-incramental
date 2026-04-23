@@ -10,7 +10,7 @@ export const INITIAL_STATE = {
   o2: 80,       o2Cap: 100,
   food: 60,     foodCap: 100,
   parts: 0,     partsCap: 100,
-  credits: 20,  creditsCap: 500,
+  credits: 20,  creditsCap: 100,
   artifacts: 0, artifactsCap: 50,
 
   // ── Crew ─────────────────────────────────────────────────
@@ -77,8 +77,8 @@ export const INITIAL_STATE = {
     { id: 5, text: 'life support at minimum. beginning emergency restoration.', tick: 0 },
     { id: 4, text: 'crew boarding. three personnel. commencing station assessment.', tick: 0 },
     { id: 3, text: 'docking. the station is intact. the crew bay is empty.', tick: 0 },
-    { id: 2, text: 'hailing outpost zero on all channels. no response.', tick: 0 },
-    { id: 1, text: 'orbital insertion complete. eridu-7 below.', tick: 0 },
+    { id: 2, text: 'hailing the orbital outpost zero on all channels. no response.', tick: 0 },
+    { id: 1, text: 'orbital insertion complete. the planet eridu-7 looms below.', tick: 0 },
   ],
   logIdCounter: 8,
 

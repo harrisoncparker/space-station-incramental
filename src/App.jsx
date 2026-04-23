@@ -154,24 +154,23 @@ function Panel({ title, badge, open, onToggle, locked, summary, children }) {
 // Uses a ref for the "ever shown" flag to avoid cancelling the
 // opacity transition via effect cleanup.
 
-function FadeIn({ show, children }) {
+function FadeIn({ show, delay = 0, children }) {
   const [visible, setVisible] = useState(false);
   const everShown = useRef(show);
   if (show) everShown.current = true;
 
   useEffect(() => {
     if (!show) return;
-    // Small delay lets the browser register opacity:0 before transitioning to 1
-    const t = setTimeout(() => setVisible(true), 60);
+    const t = setTimeout(() => setVisible(true), 60 + delay);
     return () => clearTimeout(t);
-  }, [show]); // only [show] — does NOT re-run when visible changes, so the timeout isn't cancelled
+  }, [show]);
 
   if (!everShown.current) return null;
 
   return (
     <div style={{
       opacity: visible ? 1 : 0,
-      transition: 'opacity 2.8s ease',
+      transition: 'opacity 2.4s ease',
       pointerEvents: visible ? 'auto' : 'none',
     }}>
       {children}
@@ -186,7 +185,7 @@ function CommandFeed({ state, dispatch, introPhase = 8 }) {
   const { missions, dockEvents, unlocked, log } = state;
   const introComplete = introPhase >= 8;
   // During intro: show only entries whose id ≤ current phase (one per phase, in order)
-  const displayLog = introComplete ? log.slice(0, 4) : log.filter(e => e.id <= introPhase);
+  const displayLog = introComplete ? log.slice(0, 12) : log.filter(e => e.id <= introPhase);
 
   return (
     <div style={{ padding: '8px 14px 10px', background: BG, borderBottom: `1px solid ${BD}` }}>
@@ -248,21 +247,23 @@ function CommandFeed({ state, dispatch, introPhase = 8 }) {
         );
       })}
 
-      {/* Recent log entries — flow below live items, lower urgency */}
-      {displayLog.map((entry, i) => {
-        const opacity = Math.max(0.18, 1 - i * 0.22);
-        return (
-          <div key={entry.id} style={{
-            fontSize: 12, lineHeight: 1.75,
-            color: i === 0 && (missions.length === 0 && dockEvents.length === 0)
-              ? TX
-              : `rgba(200,200,200,${opacity})`,
-            animation: i === 0 ? 'slideIn 0.3s ease' : 'none',
-          }}>
-            &gt; {entry.text}
-          </div>
-        );
-      })}
+      {/* Recent log entries — scrollable, lower urgency */}
+      <div style={{ maxHeight: 100, overflowY: 'auto' }}>
+        {displayLog.map((entry, i) => {
+          const opacity = Math.max(0.18, 1 - i * 0.22);
+          return (
+            <div key={entry.id} style={{
+              fontSize: 12, lineHeight: 1.75,
+              color: i === 0 && (missions.length === 0 && dockEvents.length === 0)
+                ? TX
+                : `rgba(200,200,200,${opacity})`,
+              animation: i === 0 ? 'slideIn 0.3s ease' : 'none',
+            }}>
+              &gt; {entry.text}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -925,13 +926,17 @@ export default function App() {
   const [introCrew,  setIntroCrew]  = useState(0);
   const introComplete = introPhase >= 8;
 
-  // Intro phase progression
-  useEffect(() => {
-    if (introComplete) return;
-    const delays = [1600, 5600, 5600, 5600, 5600, 5600, 5600, 5600, 3000];
-    const id = setTimeout(() => setIntroPhase(p => p + 1), delays[introPhase] ?? 2800);
-    return () => clearTimeout(id);
-  }, [introPhase, introComplete]);
+  const INTRO_LABELS = [
+    '[ POWER ON ]',
+    '[ ACKNOWLEDGE ]',
+    '[ OPEN OPERATIONS ]',
+    '[ CREW BOARDING ]',
+    '[ ASSIGN STATIONS ]',
+    '[ SURVEY STATION ]',
+    '[ SET OBJECTIVES ]',
+    '[ BEGIN OPERATIONS ]',
+  ];
+  const advanceIntro = useCallback(() => setIntroPhase(p => Math.min(p + 1, 8)), []);
 
   // Crew boarding animation at phase 4
   useEffect(() => {
@@ -989,57 +994,62 @@ export default function App() {
 
   return (
     <div style={{
-      maxWidth: 480, margin: '0 auto', padding: '0 0 56px',
+      maxWidth: 480, margin: '0 auto', padding: '0 0 120px',
       minHeight: '100vh', background: BG, fontFamily: MN, color: TX,
     }}>
 
-      {/* ── Phase 0: blinking cursor ── */}
-      {introPhase === 0 && (
-        <div style={{ padding: '18px 14px', fontSize: 16, color: G, animation: 'blink 0.8s step-end infinite' }}>
-          _
-        </div>
-      )}
+      {/* ── Sticky top: header + objectives + command feed ── */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: BG }}>
 
-      {/* ── Header — phase 1 ── */}
-      <FadeIn show={introPhase >= 1}>
-        <div style={{ padding: '14px 14px 0', borderBottom: `1px solid ${BD}` }}>
-          <div style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-            paddingBottom: 10,
-          }}>
-            <div style={{ fontSize: 18, letterSpacing: 4, color: G, textTransform: 'uppercase' }}>
-              Outpost Zero
-            </div>
-            <div style={{ fontSize: 10, color: DIM, letterSpacing: 1 }}>
-              eridu-7 · t+{state.tick}s
-            </div>
+        {/* Phase 0: blinking cursor */}
+        {introPhase === 0 && (
+          <div style={{ padding: '18px 14px', fontSize: 16, color: G, animation: 'blink 0.8s step-end infinite' }}>
+            _
           </div>
-          {unlocked.dock && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10 }}>
-              <span style={{ fontSize: 10, color: DIM, flexShrink: 0, minWidth: 86 }}>
-                contact: {state.nextDockEventIn}s
-              </span>
-              <div style={{ flex: 1, height: 2, background: '#181818', borderRadius: 1, overflow: 'hidden' }}>
-                <div style={{
-                  width: `${Math.max(0, Math.min(100, (1 - state.nextDockEventIn / 65) * 100))}%`,
-                  height: '100%', background: '#3a3a3a', borderRadius: 1,
-                  transition: 'width 1s linear',
-                }} />
+        )}
+
+        {/* Header — phase 1 */}
+        <FadeIn show={introPhase >= 1}>
+          <div style={{ padding: '14px 14px 0', borderBottom: `1px solid ${BD}` }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+              paddingBottom: 10,
+            }}>
+              <div style={{ fontSize: 18, letterSpacing: 4, color: G, textTransform: 'uppercase', animation: 'fadeUp 0.7s ease both' }}>
+                Outpost Zero
+              </div>
+              <div style={{ fontSize: 10, color: DIM, letterSpacing: 1, animation: 'fadeUp 0.7s ease 0.45s both' }}>
+                eridu-7 · t+{state.tick}s
               </div>
             </div>
-          )}
-        </div>
-      </FadeIn>
+            {unlocked.dock && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10, animation: 'fadeUp 0.7s ease 0.9s both' }}>
+                <span style={{ fontSize: 10, color: DIM, flexShrink: 0, minWidth: 86 }}>
+                  contact: {state.nextDockEventIn}s
+                </span>
+                <div style={{ flex: 1, height: 2, background: '#181818', borderRadius: 1, overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${Math.max(0, Math.min(100, (1 - state.nextDockEventIn / 65) * 100))}%`,
+                    height: '100%', background: '#3a3a3a', borderRadius: 1,
+                    transition: 'width 1s linear',
+                  }} />
+                </div>
+              </div>
+            )}
+          </div>
+        </FadeIn>
 
-      {/* ── Objectives — phase 7 ── */}
-      <FadeIn show={introPhase >= 7}>
-        <ObjectivesStrip state={state} />
-      </FadeIn>
+        {/* Objectives — phase 7 */}
+        <FadeIn show={introPhase >= 7}>
+          <ObjectivesStrip state={state} />
+        </FadeIn>
 
-      {/* ── Command feed — phase 1 ── */}
-      <FadeIn show={introPhase >= 1}>
-        <CommandFeed state={state} dispatch={dispatch} introPhase={introPhase} />
-      </FadeIn>
+        {/* Command feed — phase 1 */}
+        <FadeIn show={introPhase >= 1}>
+          <CommandFeed state={state} dispatch={dispatch} introPhase={introPhase} />
+        </FadeIn>
+
+      </div>
 
       {/* ── Operations — phase 3 ── */}
       <FadeIn show={introPhase >= 3}>
@@ -1074,20 +1084,49 @@ export default function App() {
         )}
       </FadeIn>
 
-      {/* ── Skip intro button ── */}
+      {/* ── Intro navigation: Continue + Skip ── */}
       {!introComplete && (
-        <button
-          onClick={() => { setIntroPhase(8); setIntroCrew(3); }}
-          style={{
-            position: 'fixed', bottom: 20, right: 20,
-            background: 'none', border: 'none',
-            color: DIM, fontFamily: MN, fontSize: 11,
-            cursor: 'pointer', letterSpacing: 1, opacity: 0.6,
-            padding: '8px 0',
-          }}
-        >
-          skip intro
-        </button>
+        <div style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0,
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          padding: '24px 14px 32px',
+          background: 'linear-gradient(transparent, rgba(0,0,0,0.97) 38%)',
+          zIndex: 20,
+          pointerEvents: 'none',
+        }}>
+          <button
+            onClick={advanceIntro}
+            style={{
+              background: 'none',
+              border: `1px solid ${G}`,
+              color: G,
+              fontFamily: MN,
+              fontSize: 13,
+              letterSpacing: 3,
+              padding: '15px 44px',
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+              animation: 'softPulse 2.5s ease-in-out infinite',
+              minWidth: 260,
+              pointerEvents: 'auto',
+            }}
+          >
+            {INTRO_LABELS[introPhase]}
+          </button>
+          <button
+            onClick={() => { setIntroPhase(8); setIntroCrew(3); }}
+            style={{
+              background: 'none', border: 'none',
+              color: DIM, fontFamily: MN, fontSize: 11,
+              cursor: 'pointer', letterSpacing: 1.5,
+              marginTop: 14, padding: '6px 12px',
+              opacity: 0.45,
+              pointerEvents: 'auto',
+            }}
+          >
+            skip intro
+          </button>
+        </div>
       )}
 
     </div>

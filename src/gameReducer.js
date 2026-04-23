@@ -20,6 +20,15 @@ function addLog(s, text) {
   };
 }
 
+// Queue multiple log entries with 1-second gaps between each.
+// First entry fires immediately; subsequent entries are delayed by index ticks.
+function addLogSequence(s, ...texts) {
+  if (!texts.length) return s;
+  s = addLog(s, texts[0]);
+  const queued = texts.slice(1).map((text, i) => ({ text, delay: i }));
+  return { ...s, logQueue: [...(s.logQueue || []), ...queued] };
+}
+
 function pickName(usedNames) {
   const avail = CREW_NAME_POOL.filter(n => !usedNames.includes(n));
   if (!avail.length) return `Crew-${Math.floor(Math.random() * 999)}`;
@@ -172,6 +181,12 @@ export function gameReducer(state, action) {
         tick: state.tick + 1,
         scanCooldown: Math.max(0, state.scanCooldown - 1),
       };
+
+      // Flush queued log entries whose delay has elapsed
+      const readyLogs   = (s.logQueue || []).filter(l => l.delay <= 0);
+      const pendingLogs = (s.logQueue || []).filter(l => l.delay > 0).map(l => ({ ...l, delay: l.delay - 1 }));
+      s = { ...s, logQueue: pendingLogs };
+      for (const l of readyLogs) s = addLog(s, l.text);
       const { o2Rate, foodRate, partsRate, creditsRate } = computeRates(s);
 
       // Apply resource rates
@@ -434,7 +449,10 @@ export function gameReducer(state, action) {
       let s = { ...state, roles: { ...state.roles, [role]: newCount } };
       if (!state.stabilised && s.roles.lifeSupport >= 1 && s.roles.hydroponics >= 1) {
         s = { ...s, stabilised: true };
-        s = addLog(s, 'life support and hydroponics online. the station will hold. the sublevel 3 beacon is still transmitting — someone is out there.');
+        s = addLogSequence(s,
+          'life support and hydroponics online. the station will hold.',
+          'the sublevel 3 beacon is still transmitting — someone is out there.'
+        );
       }
       return s;
     }

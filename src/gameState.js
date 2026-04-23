@@ -82,6 +82,7 @@ export const INITIAL_STATE = {
     { id: 1, text: 'orbital insertion complete. the planet looms below. they call it eridu-7', tick: 0 },
   ],
   logIdCounter: 8,
+  logQueue: [],
 
   // ── Win ───────────────────────────────────────────────────
   gameWon: false,

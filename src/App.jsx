@@ -512,10 +512,41 @@ function StationSection({ state, dispatch }) {
   return (
     <div>
       <div style={DESC}>Construct buildings to expand station capabilities and unlock new sections.</div>
+
+      {/* Crew Quarters — repeatable, always available */}
+      <div style={{ marginBottom: 6, padding: '9px 10px', border: `1px solid ${BD}` }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, color: TX }}>
+              Crew Quarters
+              {q > 0 && <span style={{ fontSize: 11, color: DIM, marginLeft: 8 }}>{q} built</span>}
+            </div>
+            <div style={{ fontSize: 12, color: DIM, marginTop: 2 }}>
+              Expand crew accommodation. Capacity: {state.maxCrew}
+              {total < state.maxCrew
+                ? <span style={{ color: G }}> · {state.maxCrew - total} berth{state.maxCrew - total !== 1 ? 's' : ''} open</span>
+                : <span style={{ color: A }}> · full</span>}
+            </div>
+            <div style={{ fontSize: 11, color: DIM, marginTop: 4 }}>
+              {partsCost} parts · {creditCost} credits
+              {!canBuildQ && <span style={{ color: R }}> · insufficient</span>}
+            </div>
+          </div>
+          <Btn
+            variant={canBuildQ ? 'primary' : 'default'}
+            onClick={() => dispatch({ type: 'BUILD_QUARTERS' })}
+            disabled={!canBuildQ}
+            style={{ fontSize: 11, padding: '9px 12px', flexShrink: 0 }}
+          >
+            Build
+          </Btn>
+        </div>
+      </div>
+
       {/* One-time station buildings */}
       {Object.values(BUILDINGS).map(b => {
-        const isDone   = built.includes(b.id);
-        const reqsMet  = b.requires.every(r => built.includes(r));
+        const isDone    = built.includes(b.id);
+        const reqsMet   = b.requires.every(r => built.includes(r));
         const canAfford = Object.entries(b.cost).every(([res, amt]) => (state[res] || 0) >= amt);
         const canBuild  = !isDone && reqsMet && canAfford;
 
@@ -553,30 +584,6 @@ function StationSection({ state, dispatch }) {
           </div>
         );
       })}
-
-      {/* Crew Quarters (repeatable) */}
-      <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BD}` }}>
-        <div style={{ fontSize: 11, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>
-          Crew Quarters
-        </div>
-        <div style={{ fontSize: 12, color: DIM, marginBottom: 7 }}>
-          {q} built · capacity {state.maxCrew}
-          {total < state.maxCrew
-            ? <span style={{ color: G }}> · {state.maxCrew - total} berth{state.maxCrew - total !== 1 ? 's' : ''} available</span>
-            : <span style={{ color: A }}> · full</span>}
-        </div>
-        <Btn
-          variant={canBuildQ ? 'primary' : 'default'}
-          onClick={() => dispatch({ type: 'BUILD_QUARTERS' })}
-          disabled={!canBuildQ}
-          style={{ width: '100%', textAlign: 'center', fontSize: 12 }}
-        >
-          Build Quarters — {partsCost} parts · {creditCost} credits
-        </Btn>
-        <div style={{ fontSize: 11, color: DIM, marginTop: 6 }}>
-          crew arrive automatically when berths are available.
-        </div>
-      </div>
     </div>
   );
 }
@@ -584,18 +591,18 @@ function StationSection({ state, dispatch }) {
 // ── SURFACE OPS ──────────────────────────────────────────────────
 
 function SurfaceOpsSection({ state, dispatch }) {
-  const avail           = availCrew(state);
-  const hasScanner      = state.completedResearch.includes('deepOrbitScanner');
-  const hasExpPlan      = state.completedResearch.includes('expeditionPlanning');
-  const hasSurfScanner  = state.constructedBuildings.includes('surfaceScanner');
-  const maxShuttles     = state.completedResearch.includes('secondShuttle') ? 2 : 1;
-  const canLaunch       = state.missions.length < maxShuttles && avail >= state.missionCrewCount;
-  const canScan         = hasSurfScanner && state.scanCooldown === 0
-                          && state.discoveredSites.length < 3 && state.parts >= 5;
+  const avail          = availCrew(state);
+  const hasScanner     = state.completedResearch.includes('deepOrbitScanner');
+  const hasExpPlan     = state.completedResearch.includes('expeditionPlanning');
+  const hasSurfScanner = state.constructedBuildings.includes('surfaceScanner');
+  const maxShuttles    = state.completedResearch.includes('secondShuttle') ? 2 : 1;
+  const allBusy        = state.missions.length >= maxShuttles;
+  const canLaunch      = !allBusy && avail >= state.missionCrewCount;
+  const canScan        = hasSurfScanner && state.scanCooldown === 0
+                         && state.discoveredSites.length < 3 && state.parts >= 5;
 
   const allMissions = { ...MISSIONS, ...(hasScanner ? { anomaly: ANOMALY_MISSION } : {}) };
 
-  // Resolve selected mission def (standard, anomaly, or discovered site)
   let selDef;
   if (state.selectedMission && state.selectedMission.startsWith('site_')) {
     const sid = state.selectedMission.slice(5);
@@ -610,184 +617,167 @@ function SurfaceOpsSection({ state, dispatch }) {
   return (
     <div>
       <div style={DESC}>Launch surface missions to recover resources, artifacts, and crew.</div>
-      {/* Active missions */}
-      {state.missions.map(m => {
-        const def = m.type === 'anomaly' ? ANOMALY_MISSION
-                  : m.type === 'site'    ? SITE_POOL.find(p => p.id === m.siteId)
-                  :                        MISSIONS[m.type];
-        if (!def) return null;
-        const pct = m.totalTime > 0 ? m.timer / m.totalTime : 0;
-        return (
-          <div key={m.id} style={{ marginBottom: 12, padding: '10px 10px 8px', border: `1px solid ${BD}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-              <span style={{ fontSize: 12, color: m.type === 'site' ? A : G }}>{def.name}</span>
-              <span style={{ fontSize: 12, color: A }}>{m.timer}s remaining</span>
-            </div>
-            <div style={{ fontSize: 10, color: DIM, marginBottom: 7 }}>
-              {m.crewCount} crew · {def.risk} risk
-            </div>
-            <ProgressBar pct={pct} color={m.type === 'site' ? A : A} />
-          </div>
-        );
-      })}
 
-      {/* Surface Scanner action */}
-      {hasSurfScanner && (
-        <div style={{ marginBottom: 12, padding: '9px 10px', border: `1px solid ${BD}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, color: TX }}>Surface Scanner</div>
-              <div style={{ fontSize: 10, color: DIM, marginTop: 2 }}>
-                {state.scanCooldown > 0
-                  ? `cooldown: ${state.scanCooldown}s`
-                  : state.discoveredSites.length >= 3
-                  ? 'site queue full (max 3)'
-                  : '5 parts · identifies a precursor site'}
-              </div>
-            </div>
-            <Btn
-              variant={canScan ? 'primary' : 'default'}
-              onClick={() => dispatch({ type: 'SCAN' })}
-              disabled={!canScan}
-              style={{ fontSize: 11, padding: '9px 12px', flexShrink: 0 }}
-            >
-              Scan
-            </Btn>
-          </div>
-          {state.scanCooldown > 0 && (
-            <ProgressBar pct={state.scanCooldown / 90} color={DIM} />
-          )}
-        </div>
-      )}
+      {/* Shuttle status */}
+      <div style={{ fontSize: 11, color: DIM, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase' }}>Shuttles</span>
+        <span style={{ color: allBusy ? A : G }}>{state.missions.length}/{maxShuttles}</span>
+        {allBusy && <span style={{ color: DIM }}>· all deployed — progress tracked in feed</span>}
+      </div>
 
-      {/* Mission type selector */}
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 11, color: DIM, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Mission type</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {/* Standard missions */}
-          {Object.values(allMissions).map(m => {
-            const sel = state.selectedMission === m.id;
-            const rw = m.getRewards ? m.getRewards(state.missionCrewCount) : null;
-            const rewardStr = rw
-              ? Object.entries(rw).map(([k, v]) => k === 'newCrew' ? '+1 crew' : `+${v} ${k}`).join(' · ')
-              : '';
-            const displayDur = Math.ceil(m.duration * durMult);
-            return (
-              <button
-                key={m.id}
-                onClick={() => dispatch({ type: 'SET_MISSION', missionType: m.id })}
-                style={{
-                  background: sel ? '#141414' : 'none',
-                  border: `1px solid ${sel ? G : BD}`,
-                  color: sel ? G : DIM,
-                  fontFamily: MN, fontSize: 12,
-                  padding: '9px 10px', cursor: 'pointer',
-                  textAlign: 'left', minHeight: 44,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>{m.name}</span>
-                  <span style={{ color: DIM, fontSize: 11 }}>{displayDur}s · {m.risk}</span>
+      {/* Greyed when all shuttles in flight */}
+      <div style={{ opacity: allBusy ? 0.35 : 1, pointerEvents: allBusy ? 'none' : 'auto', transition: 'opacity 0.3s ease' }}>
+
+        {/* Surface Scanner action */}
+        {hasSurfScanner && (
+          <div style={{ marginBottom: 12, padding: '9px 10px', border: `1px solid ${BD}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: TX }}>Surface Scanner</div>
+                <div style={{ fontSize: 10, color: DIM, marginTop: 2 }}>
+                  {state.scanCooldown > 0
+                    ? `cooldown: ${state.scanCooldown}s`
+                    : state.discoveredSites.length >= 3
+                    ? 'site queue full (max 3)'
+                    : '5 parts · identifies a precursor site'}
                 </div>
-                {sel && rewardStr && (
-                  <div style={{ fontSize: 11, color: INV, marginTop: 3 }}>
-                    est. reward ({state.missionCrewCount} crew): {rewardStr}
-                  </div>
-                )}
-              </button>
-            );
-          })}
-
-          {/* Discovered Precursor sites */}
-          {state.discoveredSites.length > 0 && (
-            <>
-              <div style={{
-                fontSize: 9, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase',
-                marginTop: 6, marginBottom: 2, paddingTop: 8, borderTop: `1px solid ${BD}`,
-              }}>
-                Precursor Sites
               </div>
-              {state.discoveredSites.map(site => {
-                const mKey = `site_${site.id}`;
-                const sel  = state.selectedMission === mKey;
-                const rw   = site.getRewards ? site.getRewards(state.missionCrewCount) : null;
-                const rewardStr = rw
-                  ? Object.entries(rw).map(([k, v]) => `+${v} ${k}`).join(' · ')
-                  : '';
-                const displayDur = Math.ceil(site.duration * durMult);
-                return (
-                  <button
-                    key={mKey}
-                    onClick={() => dispatch({ type: 'SET_MISSION', missionType: mKey })}
-                    style={{
-                      background: sel ? '#120f00' : 'none',
-                      border: `1px solid ${sel ? A : '#2a2010'}`,
-                      color: sel ? A : '#6a5a30',
-                      fontFamily: MN, fontSize: 12,
-                      padding: '9px 10px', cursor: 'pointer',
-                      textAlign: 'left', minHeight: 44,
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>{site.name}</span>
-                      <span style={{ color: sel ? '#6a5a30' : DIM, fontSize: 11 }}>{displayDur}s · {site.risk}</span>
+              <Btn
+                variant={canScan ? 'primary' : 'default'}
+                onClick={() => dispatch({ type: 'SCAN' })}
+                disabled={!canScan}
+                style={{ fontSize: 11, padding: '9px 12px', flexShrink: 0 }}
+              >
+                Scan
+              </Btn>
+            </div>
+            {state.scanCooldown > 0 && (
+              <ProgressBar pct={state.scanCooldown / 90} color={DIM} />
+            )}
+          </div>
+        )}
+
+        {/* Mission type selector */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: DIM, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Mission type</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {Object.values(allMissions).map(m => {
+              const sel = state.selectedMission === m.id;
+              const rw = m.getRewards ? m.getRewards(state.missionCrewCount) : null;
+              const rewardStr = rw
+                ? Object.entries(rw).map(([k, v]) => k === 'newCrew' ? '+1 crew' : `+${v} ${k}`).join(' · ')
+                : '';
+              const displayDur = Math.ceil(m.duration * durMult);
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => dispatch({ type: 'SET_MISSION', missionType: m.id })}
+                  style={{
+                    background: sel ? '#141414' : 'none',
+                    border: `1px solid ${sel ? G : BD}`,
+                    color: sel ? G : DIM,
+                    fontFamily: MN, fontSize: 12,
+                    padding: '9px 10px', cursor: 'pointer',
+                    textAlign: 'left', minHeight: 44,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>{m.name}</span>
+                    <span style={{ color: DIM, fontSize: 11 }}>{displayDur}s · {m.risk}</span>
+                  </div>
+                  {sel && rewardStr && (
+                    <div style={{ fontSize: 11, color: INV, marginTop: 3 }}>
+                      est. reward ({state.missionCrewCount} crew): {rewardStr}
                     </div>
-                    <div style={{ fontSize: 11, color: sel ? '#8a7a50' : '#555', marginTop: 2, lineHeight: 1.4 }}>
-                      {site.desc}
-                    </div>
-                    {sel && rewardStr && (
-                      <div style={{ fontSize: 11, color: A, marginTop: 4 }}>
-                        est. reward ({state.missionCrewCount} crew): {rewardStr}
+                  )}
+                </button>
+              );
+            })}
+
+            {/* Discovered Precursor sites */}
+            {state.discoveredSites.length > 0 && (
+              <>
+                <div style={{
+                  fontSize: 9, color: DIM, letterSpacing: 1.5, textTransform: 'uppercase',
+                  marginTop: 6, marginBottom: 2, paddingTop: 8, borderTop: `1px solid ${BD}`,
+                }}>
+                  Precursor Sites
+                </div>
+                {state.discoveredSites.map(site => {
+                  const mKey = `site_${site.id}`;
+                  const sel  = state.selectedMission === mKey;
+                  const rw   = site.getRewards ? site.getRewards(state.missionCrewCount) : null;
+                  const rewardStr = rw
+                    ? Object.entries(rw).map(([k, v]) => `+${v} ${k}`).join(' · ')
+                    : '';
+                  const displayDur = Math.ceil(site.duration * durMult);
+                  return (
+                    <button
+                      key={mKey}
+                      onClick={() => dispatch({ type: 'SET_MISSION', missionType: mKey })}
+                      style={{
+                        background: sel ? '#120f00' : 'none',
+                        border: `1px solid ${sel ? A : '#2a2010'}`,
+                        color: sel ? A : '#6a5a30',
+                        fontFamily: MN, fontSize: 12,
+                        padding: '9px 10px', cursor: 'pointer',
+                        textAlign: 'left', minHeight: 44,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>{site.name}</span>
+                        <span style={{ color: sel ? '#6a5a30' : DIM, fontSize: 11 }}>{displayDur}s · {site.risk}</span>
                       </div>
-                    )}
-                  </button>
-                );
-              })}
-            </>
-          )}
+                      <div style={{ fontSize: 11, color: sel ? '#8a7a50' : '#555', marginTop: 2, lineHeight: 1.4 }}>
+                        {site.desc}
+                      </div>
+                      {sel && rewardStr && (
+                        <div style={{ fontSize: 11, color: A, marginTop: 4 }}>
+                          est. reward ({state.missionCrewCount} crew): {rewardStr}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Crew count + launch */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11, color: DIM }}>crew:</span>
-        <Btn
-          onClick={() => dispatch({ type: 'SET_MISSION_CREW', count: state.missionCrewCount - 1 })}
-          disabled={state.missionCrewCount <= 1}
-          style={{ padding: '9px 15px' }}
-        >−</Btn>
-        <span style={{ width: 18, textAlign: 'center', fontSize: 16, color: TX }}>{state.missionCrewCount}</span>
-        <Btn
-          onClick={() => dispatch({ type: 'SET_MISSION_CREW', count: state.missionCrewCount + 1 })}
-          disabled={state.missionCrewCount >= 3 || state.missionCrewCount >= avail}
-          style={{ padding: '9px 15px' }}
-        >+</Btn>
-        <span style={{ fontSize: 11, color: DIM }}>
-          success:{' '}
-          <span style={{ color: successPct >= 85 ? G : successPct >= 70 ? A : R }}>
-            {successPct}%
+        {/* Crew count + launch */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: DIM }}>crew:</span>
+          <Btn
+            onClick={() => dispatch({ type: 'SET_MISSION_CREW', count: state.missionCrewCount - 1 })}
+            disabled={state.missionCrewCount <= 1}
+            style={{ padding: '9px 15px' }}
+          >−</Btn>
+          <span style={{ width: 18, textAlign: 'center', fontSize: 16, color: TX }}>{state.missionCrewCount}</span>
+          <Btn
+            onClick={() => dispatch({ type: 'SET_MISSION_CREW', count: state.missionCrewCount + 1 })}
+            disabled={state.missionCrewCount >= 3 || state.missionCrewCount >= avail}
+            style={{ padding: '9px 15px' }}
+          >+</Btn>
+          <span style={{ fontSize: 11, color: DIM }}>
+            success:{' '}
+            <span style={{ color: successPct >= 85 ? G : successPct >= 70 ? A : R }}>
+              {successPct}%
+            </span>
           </span>
-        </span>
-      </div>
-
-      <Btn
-        variant={canLaunch ? 'primary' : 'default'}
-        onClick={() => dispatch({ type: 'LAUNCH_MISSION' })}
-        disabled={!canLaunch}
-        style={{ width: '100%', fontSize: 12 }}
-      >
-        {state.missions.length >= maxShuttles
-          ? 'all shuttles in flight'
-          : avail < state.missionCrewCount
-          ? `not enough crew (need ${state.missionCrewCount} available)`
-          : `Launch — ${selDef.name}`}
-      </Btn>
-
-      {maxShuttles > 1 && (
-        <div style={{ fontSize: 10, color: DIM, marginTop: 6, textAlign: 'center' }}>
-          {state.missions.length}/{maxShuttles} shuttles active
         </div>
-      )}
+
+        <Btn
+          variant={canLaunch ? 'primary' : 'default'}
+          onClick={() => dispatch({ type: 'LAUNCH_MISSION' })}
+          disabled={!canLaunch}
+          style={{ width: '100%', fontSize: 12 }}
+        >
+          {avail < state.missionCrewCount
+            ? `not enough crew (need ${state.missionCrewCount} available)`
+            : `Launch — ${selDef.name}`}
+        </Btn>
+
+      </div>
     </div>
   );
 }
@@ -1055,6 +1045,76 @@ function SettingsModal({ state, onClose }) {
   );
 }
 
+// ── WELCOME BACK MODAL ─────────────────────────────────────────
+
+function WelcomeBackModal({ state, onClose }) {
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 50,
+        background: 'rgba(0,0,0,0.92)',
+        display: 'flex', justifyContent: 'center', alignItems: 'center',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 480,
+          background: BG, border: `1px solid ${BD}`,
+          padding: '32px 24px 28px',
+          fontFamily: MN,
+          animation: 'fadeUp 0.5s ease both',
+        }}
+      >
+        <div style={{ fontSize: 18, letterSpacing: 4, color: G, textTransform: 'uppercase', marginBottom: 4 }}>
+          Outpost Zero
+        </div>
+        <div style={{ fontSize: 10, color: DIM, letterSpacing: 2.5, textTransform: 'uppercase', marginBottom: 24 }}>
+          command resumed
+        </div>
+
+        <div style={{ borderTop: `1px solid ${BD}`, borderBottom: `1px solid ${BD}`, padding: '14px 0', marginBottom: 24 }}>
+          <div style={{ fontSize: 12, color: DIM, lineHeight: 2 }}>
+            <span style={{ color: TX }}>eridu-7</span> · t+{state.tick}s elapsed
+          </div>
+          <div style={{ fontSize: 12, color: DIM, lineHeight: 2 }}>
+            <span style={{ color: TX }}>{state.crew.length}</span> crew aboard
+          </div>
+          <div style={{ fontSize: 12, color: DIM, lineHeight: 2 }}>
+            <span style={{ color: TX }}>{state.constructedBuildings.length}</span> facilities constructed
+          </div>
+          {state.completedResearch.length > 0 && (
+            <div style={{ fontSize: 12, color: DIM, lineHeight: 2 }}>
+              <span style={{ color: TX }}>{state.completedResearch.length}</span> technologies developed
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={onClose}
+          style={{
+            width: '100%', background: 'none',
+            border: `1px solid ${G}`, color: G,
+            fontFamily: MN, fontSize: 13, letterSpacing: 3,
+            padding: '14px', cursor: 'pointer',
+            textTransform: 'uppercase',
+            animation: 'softPulse 2.5s ease-in-out infinite',
+          }}
+        >
+          [ RESUME COMMAND ]
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── ROOT APP ───────────────────────────────────────────────────
 
 export default function App() {
@@ -1096,7 +1156,8 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', flush);
   }, []);
 
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettings,    setShowSettings]    = useState(false);
+  const [showWelcomeBack, setShowWelcomeBack] = useState(() => loadGame() !== null);
 
   // Crew boarding animation at phase 4
   useEffect(() => {
@@ -1182,9 +1243,9 @@ export default function App() {
                 <span>eridu-7 · t+{state.tick}s</span>
                 <button
                   onClick={() => setShowSettings(true)}
-                  style={{ background: 'none', border: 'none', color: DIM, fontFamily: MN, fontSize: 13, cursor: 'pointer', padding: 0, opacity: 0.6, lineHeight: 1 }}
+                  style={{ background: 'none', border: `1px solid ${BD}`, color: DIM, fontFamily: MN, fontSize: 10, cursor: 'pointer', padding: '3px 8px', letterSpacing: 1.5, textTransform: 'uppercase', lineHeight: 1.4 }}
                 >
-                  ⚙
+                  ⚙ settings
                 </button>
               </div>
             </div>
@@ -1250,7 +1311,8 @@ export default function App() {
         )}
       </FadeIn>
 
-      {showSettings && <SettingsModal state={state} onClose={() => setShowSettings(false)} />}
+      {showWelcomeBack && <WelcomeBackModal state={state} onClose={() => setShowWelcomeBack(false)} />}
+      {showSettings    && <SettingsModal    state={state} onClose={() => setShowSettings(false)} />}
 
       {/* ── Intro navigation: Continue + Skip ── */}
       {!introComplete && (

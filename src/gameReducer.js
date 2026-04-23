@@ -3,7 +3,7 @@
 // ============================================================
 import {
   CREW_NAME_POOL, MISSIONS, ANOMALY_MISSION, RESEARCH_TREE,
-  BUILDINGS, SITE_POOL, QUARTERS_BASE_COST, QUARTERS_SCALE,
+  BUILDINGS, SITE_POOL, QUARTERS_BASE_COST, QUARTERS_SCALE, RESOURCE_LABELS,
 } from './gameConstants';
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -239,6 +239,10 @@ export function gameReducer(state, action) {
             artifacts: clamp(s.artifacts + (rw.artifacts || 0), 0, s.artifactsCap),
             totalMissionsCompleted: s.totalMissionsCompleted + 1,
           };
+          const rewardStr = Object.entries(rw)
+            .filter(([k]) => k !== 'newCrew' && (rw[k] || 0) > 0)
+            .map(([k, v]) => `+${v} ${RESOURCE_LABELS[k] || k}`)
+            .join(' · ');
           if (rw.newCrew && s.crew.length < s.maxCrew) {
             const name = pickName(s.crew.map(c => c.name));
             s = {
@@ -246,9 +250,9 @@ export function gameReducer(state, action) {
               crew: [...s.crew, { id: s.crewIdCounter, name, status: 'available', injuredTimer: 0 }],
               crewIdCounter: s.crewIdCounter + 1,
             };
-            s = addLog(s, `shuttle returns. ${name} joins the crew.`);
+            s = addLog(s, `${def.name.toLowerCase()} returns. ${name} joins the crew.`);
           } else {
-            s = addLog(s, `shuttle returns from ${def.name.toLowerCase()}. cargo secured.`);
+            s = addLog(s, `${def.name.toLowerCase()} returns. ${rewardStr}.`);
           }
         } else {
           s = addLog(s, `shuttle returns from ${def.name.toLowerCase()}. mission failed.`);
